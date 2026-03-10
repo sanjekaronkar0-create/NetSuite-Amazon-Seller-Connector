@@ -6,6 +6,14 @@
         <path>~/FileCabinet/SuiteScripts/AmazonConnector/*</path>
     </files>
     <objects>
+        <path>~/Objects/customlist_amz_order_type.xml</path>
+        <path>~/Objects/customlist_amz_log_type.xml</path>
+        <path>~/Objects/customlist_amz_log_status.xml</path>
+        <path>~/Objects/customlist_amz_order_status.xml</path>
+        <path>~/Objects/customlist_amz_fulfill_channel.xml</path>
+        <path>~/Objects/customlist_amz_settle_status.xml</path>
+        <path>~/Objects/customlist_amz_return_status.xml</path>
+        <path>~/Objects/customlist_amz_error_status.xml</path>
         <path>~/Objects/customrecord_amz_connector_config.xml</path>
         <path>~/Objects/customrecord_amz_integration_log.xml</path>
         <path>~/Objects/customrecord_amz_order_map.xml</path>

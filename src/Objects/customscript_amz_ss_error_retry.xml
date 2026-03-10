@@ -9,14 +9,6 @@
       <title>Amazon Error Retry Deployment</title>
       <isdeployed>T</isdeployed>
       <loglevel>DEBUG</loglevel>
-      <recurrence>
-        <single>
-          <repeat>
-            <frequency>MINUTES</frequency>
-            <every>30</every>
-          </repeat>
-        </single>
-      </recurrence>
     </scriptdeployment>
   </scriptdeployments>
 </scheduledscript>

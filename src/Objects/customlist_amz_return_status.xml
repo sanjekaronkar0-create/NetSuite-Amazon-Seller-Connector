@@ -1,0 +1,16 @@
+<customlist scriptid="customlist_amz_return_status">
+  <name>Amazon Return Status</name>
+  <isinactive>F</isinactive>
+  <isordered>T</isordered>
+  <customvalues>
+    <customvalue scriptid="custrecord_amz_ret_status_1">
+      <value>Pending</value>
+    </customvalue>
+    <customvalue scriptid="custrecord_amz_ret_status_2">
+      <value>Processed</value>
+    </customvalue>
+    <customvalue scriptid="custrecord_amz_ret_status_3">
+      <value>Error</value>
+    </customvalue>
+  </customvalues>
+</customlist>

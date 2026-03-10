@@ -65,20 +65,9 @@
     <customrecordcustomfield scriptid="custrecord_amz_eq_status">
       <label>Status</label>
       <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>[scriptid=customlist_amz_error_status]</selectrecordtype>
       <ismandatory>T</ismandatory>
       <displaytype>NORMAL</displaytype>
-      <selectoption scriptid="custrecord_amz_eq_status_1">
-        <value>Pending</value>
-      </selectoption>
-      <selectoption scriptid="custrecord_amz_eq_status_2">
-        <value>Retrying</value>
-      </selectoption>
-      <selectoption scriptid="custrecord_amz_eq_status_3">
-        <value>Resolved</value>
-      </selectoption>
-      <selectoption scriptid="custrecord_amz_eq_status_4">
-        <value>Failed</value>
-      </selectoption>
     </customrecordcustomfield>
 
     <customrecordcustomfield scriptid="custrecord_amz_eq_payload">
@@ -97,7 +86,7 @@
     <customrecordcustomfield scriptid="custrecord_amz_eq_created">
       <label>Created</label>
       <fieldtype>DATETIMETZ</fieldtype>
-      <displaytype>DISABLED</displaytype>
+      <displaytype>INLINE</displaytype>
     </customrecordcustomfield>
 
   </customrecordcustomfields>

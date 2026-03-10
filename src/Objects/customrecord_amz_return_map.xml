@@ -41,10 +41,10 @@
     </customrecordcustomfield>
 
     <customrecordcustomfield scriptid="custrecord_amz_ret_ns_rma">
-      <label>NetSuite Return Authorization</label>
-      <fieldtype>SELECT</fieldtype>
-      <selectrecordtype>-32</selectrecordtype>
+      <label>NetSuite Return Authorization ID</label>
+      <fieldtype>INTEGER</fieldtype>
       <displaytype>NORMAL</displaytype>
+      <description>Internal ID of the linked NetSuite Return Authorization</description>
     </customrecordcustomfield>
 
     <customrecordcustomfield scriptid="custrecord_amz_ret_ns_credit_memo">
@@ -57,17 +57,9 @@
     <customrecordcustomfield scriptid="custrecord_amz_ret_status">
       <label>Status</label>
       <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>[scriptid=customlist_amz_return_status]</selectrecordtype>
       <ismandatory>T</ismandatory>
       <displaytype>NORMAL</displaytype>
-      <selectoption scriptid="custrecord_amz_ret_status_1">
-        <value>Pending</value>
-      </selectoption>
-      <selectoption scriptid="custrecord_amz_ret_status_2">
-        <value>Processed</value>
-      </selectoption>
-      <selectoption scriptid="custrecord_amz_ret_status_3">
-        <value>Error</value>
-      </selectoption>
     </customrecordcustomfield>
 
     <customrecordcustomfield scriptid="custrecord_amz_ret_order_map">

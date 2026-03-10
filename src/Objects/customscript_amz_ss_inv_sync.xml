@@ -11,11 +11,6 @@
       <title>Amazon Inventory Sync Deployment</title>
       <isdeployed>T</isdeployed>
       <loglevel>DEBUG</loglevel>
-      <recurrence>
-        <single>
-          <repeat>EVERY_HOUR</repeat>
-        </single>
-      </recurrence>
     </scriptdeployment>
   </scriptdeployments>
 </scheduledscript>

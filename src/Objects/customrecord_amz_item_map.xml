@@ -69,13 +69,13 @@
     <customrecordcustomfield scriptid="custrecord_amz_im_last_inv_qty">
       <label>Last Synced Quantity</label>
       <fieldtype>INTEGER</fieldtype>
-      <displaytype>DISABLED</displaytype>
+      <displaytype>INLINE</displaytype>
     </customrecordcustomfield>
 
     <customrecordcustomfield scriptid="custrecord_amz_im_last_synced">
       <label>Last Synced</label>
       <fieldtype>DATETIMETZ</fieldtype>
-      <displaytype>DISABLED</displaytype>
+      <displaytype>INLINE</displaytype>
     </customrecordcustomfield>
 
   </customrecordcustomfields>

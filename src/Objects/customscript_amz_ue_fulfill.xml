@@ -11,7 +11,7 @@
       <title>Amazon Fulfillment UE Deployment</title>
       <isdeployed>T</isdeployed>
       <loglevel>DEBUG</loglevel>
-      <recordtype>ITEM_FULFILLMENT</recordtype>
+      <recordtype>ITEMFULFILLMENT</recordtype>
       <aftersubmitfunction>afterSubmit</aftersubmitfunction>
     </scriptdeployment>
   </scriptdeployments>

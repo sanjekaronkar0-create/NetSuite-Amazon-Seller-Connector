@@ -1,0 +1,13 @@
+<customlist scriptid="customlist_amz_order_type">
+  <name>Amazon Order Type</name>
+  <isinactive>F</isinactive>
+  <isordered>T</isordered>
+  <customvalues>
+    <customvalue scriptid="custrecord_amz_cfg_ot_1">
+      <value>Sales Order</value>
+    </customvalue>
+    <customvalue scriptid="custrecord_amz_cfg_ot_2">
+      <value>Cash Sale</value>
+    </customvalue>
+  </customvalues>
+</customlist>

@@ -11,11 +11,6 @@
       <title>Amazon Return Sync Deployment</title>
       <isdeployed>T</isdeployed>
       <loglevel>DEBUG</loglevel>
-      <recurrence>
-        <single>
-          <repeat>EVERY_SIX_HOURS</repeat>
-        </single>
-      </recurrence>
     </scriptdeployment>
   </scriptdeployments>
 </scheduledscript>

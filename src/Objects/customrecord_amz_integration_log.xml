@@ -18,46 +18,17 @@
     <customrecordcustomfield scriptid="custrecord_amz_log_type">
       <label>Log Type</label>
       <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>[scriptid=customlist_amz_log_type]</selectrecordtype>
       <ismandatory>T</ismandatory>
       <displaytype>NORMAL</displaytype>
-      <customfieldfilters/>
-      <selectoption scriptid="custrecord_amz_log_type_1">
-        <value>Order Sync</value>
-      </selectoption>
-      <selectoption scriptid="custrecord_amz_log_type_2">
-        <value>Inventory Sync</value>
-      </selectoption>
-      <selectoption scriptid="custrecord_amz_log_type_3">
-        <value>Fulfillment Sync</value>
-      </selectoption>
-      <selectoption scriptid="custrecord_amz_log_type_4">
-        <value>Settlement Sync</value>
-      </selectoption>
-      <selectoption scriptid="custrecord_amz_log_type_5">
-        <value>Return Sync</value>
-      </selectoption>
-      <selectoption scriptid="custrecord_amz_log_type_6">
-        <value>API Call</value>
-      </selectoption>
     </customrecordcustomfield>
 
     <customrecordcustomfield scriptid="custrecord_amz_log_status">
       <label>Status</label>
       <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>[scriptid=customlist_amz_log_status]</selectrecordtype>
       <ismandatory>T</ismandatory>
       <displaytype>NORMAL</displaytype>
-      <selectoption scriptid="custrecord_amz_log_status_1">
-        <value>Success</value>
-      </selectoption>
-      <selectoption scriptid="custrecord_amz_log_status_2">
-        <value>Error</value>
-      </selectoption>
-      <selectoption scriptid="custrecord_amz_log_status_3">
-        <value>Warning</value>
-      </selectoption>
-      <selectoption scriptid="custrecord_amz_log_status_4">
-        <value>In Progress</value>
-      </selectoption>
     </customrecordcustomfield>
 
     <customrecordcustomfield scriptid="custrecord_amz_log_message">
@@ -103,7 +74,7 @@
     <customrecordcustomfield scriptid="custrecord_amz_log_timestamp">
       <label>Timestamp</label>
       <fieldtype>DATETIMETZ</fieldtype>
-      <displaytype>DISABLED</displaytype>
+      <displaytype>INLINE</displaytype>
     </customrecordcustomfield>
 
   </customrecordcustomfields>

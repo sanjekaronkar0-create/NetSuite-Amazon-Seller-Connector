@@ -1,0 +1,19 @@
+<customlist scriptid="customlist_amz_settle_status">
+  <name>Amazon Settlement Status</name>
+  <isinactive>F</isinactive>
+  <isordered>T</isordered>
+  <customvalues>
+    <customvalue scriptid="custrecord_amz_stl_status_1">
+      <value>Pending</value>
+    </customvalue>
+    <customvalue scriptid="custrecord_amz_stl_status_2">
+      <value>Processing</value>
+    </customvalue>
+    <customvalue scriptid="custrecord_amz_stl_status_3">
+      <value>Reconciled</value>
+    </customvalue>
+    <customvalue scriptid="custrecord_amz_stl_status_4">
+      <value>Error</value>
+    </customvalue>
+  </customvalues>
+</customlist>
