@@ -8,13 +8,14 @@
 define([
     'N/task',
     'N/runtime',
+    'N/https',
     'N/log',
     '../lib/constants',
     '../lib/configHelper',
     '../lib/amazonClient',
     '../lib/logger',
     '../services/returnService'
-], function (task, runtime, log, constants, configHelper, amazonClient, logger, returnService) {
+], function (task, runtime, https, log, constants, configHelper, amazonClient, logger, returnService) {
 
     function execute(context) {
         logger.progress(constants.LOG_TYPE.RETURN_SYNC, 'Return sync started');
@@ -89,7 +90,7 @@ define([
 
         // Download report
         const docResponse = amazonClient.getReportDocument(config, report.reportDocumentId);
-        const fileResponse = require('N/https').get({ url: docResponse.url });
+        const fileResponse = https.get({ url: docResponse.url });
         const returnRows = parseReturnReport(fileResponse.body);
 
         log.audit({

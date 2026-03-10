@@ -164,5 +164,213 @@
       <description>Generic customer record for Amazon marketplace orders</description>
     </customrecordcustomfield>
 
+    <!-- New Sync Toggles -->
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_pricing_enabled">
+      <label>Pricing Sync Enabled</label>
+      <fieldtype>CHECKBOX</fieldtype>
+      <defaultvalue>F</defaultvalue>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_catalog_enabled">
+      <label>Catalog Sync Enabled</label>
+      <fieldtype>CHECKBOX</fieldtype>
+      <defaultvalue>F</defaultvalue>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <!-- Additional Sync Timestamps -->
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_last_return_sync">
+      <label>Last Return Sync</label>
+      <fieldtype>DATETIMETZ</fieldtype>
+      <displaytype>DISABLED</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_last_pricing_sync">
+      <label>Last Pricing Sync</label>
+      <fieldtype>DATETIMETZ</fieldtype>
+      <displaytype>DISABLED</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_last_catalog_sync">
+      <label>Last Catalog Sync</label>
+      <fieldtype>DATETIMETZ</fieldtype>
+      <displaytype>DISABLED</displaytype>
+    </customrecordcustomfield>
+
+    <!-- Order Configuration -->
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_order_type">
+      <label>Order Type</label>
+      <fieldtype>SELECT</fieldtype>
+      <displaytype>NORMAL</displaytype>
+      <description>Create Sales Orders or Cash Sales from Amazon orders</description>
+      <selectoption scriptid="custrecord_amz_cfg_ot_1">
+        <value>Sales Order</value>
+      </selectoption>
+      <selectoption scriptid="custrecord_amz_cfg_ot_2">
+        <value>Cash Sale</value>
+      </selectoption>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_so_form">
+      <label>Sales Order Custom Form</label>
+      <fieldtype>INTEGER</fieldtype>
+      <displaytype>NORMAL</displaytype>
+      <description>Custom form ID to use for Sales Orders</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_cs_form">
+      <label>Cash Sale Custom Form</label>
+      <fieldtype>INTEGER</fieldtype>
+      <displaytype>NORMAL</displaytype>
+      <description>Custom form ID to use for Cash Sales</description>
+    </customrecordcustomfield>
+
+    <!-- Financial Accounts for Settlement Reconciliation -->
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_settle_account">
+      <label>Settlement Bank Account</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>-112</selectrecordtype>
+      <displaytype>NORMAL</displaytype>
+      <description>Bank account for Amazon settlement deposits</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_fee_account">
+      <label>Selling Fee Expense Account</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>-112</selectrecordtype>
+      <displaytype>NORMAL</displaytype>
+      <description>Expense account for Amazon selling fees</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_fba_fee_account">
+      <label>FBA Fee Expense Account</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>-112</selectrecordtype>
+      <displaytype>NORMAL</displaytype>
+      <description>Expense account for FBA fulfillment fees</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_refund_account">
+      <label>Refund Account</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>-112</selectrecordtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_promo_account">
+      <label>Promotional Rebate Account</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>-112</selectrecordtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_shipping_item">
+      <label>Shipping Charge Item</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>-10</selectrecordtype>
+      <displaytype>NORMAL</displaytype>
+      <description>Service/non-inventory item for Amazon shipping charges on orders</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_discount_item">
+      <label>Discount Item</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>-10</selectrecordtype>
+      <displaytype>NORMAL</displaytype>
+      <description>Discount item for Amazon promotional discounts</description>
+    </customrecordcustomfield>
+
+    <!-- FBA Settings -->
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_fba_enabled">
+      <label>Import FBA Orders</label>
+      <fieldtype>CHECKBOX</fieldtype>
+      <defaultvalue>T</defaultvalue>
+      <displaytype>NORMAL</displaytype>
+      <description>Import Amazon FBA (Fulfilled by Amazon) orders into NetSuite</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_fba_location">
+      <label>FBA Warehouse Location</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>-103</selectrecordtype>
+      <displaytype>NORMAL</displaytype>
+      <description>NetSuite location representing Amazon FBA warehouses</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_fba_customer">
+      <label>FBA Customer</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>-2</selectrecordtype>
+      <displaytype>NORMAL</displaytype>
+      <description>Customer record for FBA orders (if different from MFN customer)</description>
+    </customrecordcustomfield>
+
+    <!-- Multi-Marketplace -->
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_addl_mkt_ids">
+      <label>Additional Marketplace IDs</label>
+      <fieldtype>CLOBTEXT</fieldtype>
+      <displaytype>NORMAL</displaytype>
+      <description>Comma-separated list of additional marketplace IDs for this region</description>
+    </customrecordcustomfield>
+
+    <!-- Automation Flags -->
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_auto_credit_memo">
+      <label>Auto-Create Credit Memos</label>
+      <fieldtype>CHECKBOX</fieldtype>
+      <defaultvalue>F</defaultvalue>
+      <displaytype>NORMAL</displaytype>
+      <description>Automatically create Credit Memos when processing Amazon returns</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_auto_deposit">
+      <label>Auto-Create Deposits</label>
+      <fieldtype>CHECKBOX</fieldtype>
+      <defaultvalue>F</defaultvalue>
+      <displaytype>NORMAL</displaytype>
+      <description>Automatically create Deposit records from settlement data</description>
+    </customrecordcustomfield>
+
+    <!-- Tax Handling -->
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_tax_item">
+      <label>Tax Item</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>-10</selectrecordtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_tax_code">
+      <label>Default Tax Code</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>-127</selectrecordtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <!-- Error Retry Settings -->
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_max_retries">
+      <label>Max Retry Attempts</label>
+      <fieldtype>INTEGER</fieldtype>
+      <displaytype>NORMAL</displaytype>
+      <defaultvalue>3</defaultvalue>
+      <description>Maximum number of retry attempts for failed operations</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_retry_delay">
+      <label>Retry Delay (Minutes)</label>
+      <fieldtype>INTEGER</fieldtype>
+      <displaytype>NORMAL</displaytype>
+      <defaultvalue>30</defaultvalue>
+      <description>Initial delay between retry attempts (doubles each retry)</description>
+    </customrecordcustomfield>
+
   </customrecordcustomfields>
 </customrecordtype>

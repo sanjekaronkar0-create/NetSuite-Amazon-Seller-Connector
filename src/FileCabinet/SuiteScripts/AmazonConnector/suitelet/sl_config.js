@@ -36,10 +36,13 @@ define([
         const form = serverWidget.createForm({ title: 'Amazon Seller Connector - Dashboard' });
 
         // Add action buttons
-        form.addButton({ id: 'custpage_btn_sync_orders', label: 'Sync Orders Now', functionName: 'triggerSync("orders")' });
-        form.addButton({ id: 'custpage_btn_sync_inventory', label: 'Sync Inventory Now', functionName: 'triggerSync("inventory")' });
-        form.addButton({ id: 'custpage_btn_sync_settlements', label: 'Sync Settlements Now', functionName: 'triggerSync("settlements")' });
-        form.addButton({ id: 'custpage_btn_sync_returns', label: 'Sync Returns Now', functionName: 'triggerSync("returns")' });
+        form.addButton({ id: 'custpage_btn_sync_orders', label: 'Sync Orders', functionName: 'triggerSync("orders")' });
+        form.addButton({ id: 'custpage_btn_sync_inventory', label: 'Sync Inventory', functionName: 'triggerSync("inventory")' });
+        form.addButton({ id: 'custpage_btn_sync_settlements', label: 'Sync Settlements', functionName: 'triggerSync("settlements")' });
+        form.addButton({ id: 'custpage_btn_sync_returns', label: 'Sync Returns', functionName: 'triggerSync("returns")' });
+        form.addButton({ id: 'custpage_btn_sync_pricing', label: 'Sync Pricing', functionName: 'triggerSync("pricing")' });
+        form.addButton({ id: 'custpage_btn_sync_catalog', label: 'Sync Catalog', functionName: 'triggerSync("catalog")' });
+        form.addButton({ id: 'custpage_btn_retry_errors', label: 'Retry Errors', functionName: 'triggerSync("errors")' });
 
         form.clientScriptModulePath = '../client/cs_config.js';
 
@@ -107,6 +110,43 @@ define([
         statsSublist.addField({ id: 'custpage_stat_count', type: serverWidget.FieldType.TEXT, label: 'Count' });
 
         populateOrderStats(statsSublist);
+
+        // -- Error Queue Tab --
+        const errorTab = form.addTab({ id: 'custpage_tab_errors', label: 'Error Queue' });
+
+        const errorSublist = form.addSublist({
+            id: 'custpage_sl_errors',
+            type: serverWidget.SublistType.LIST,
+            label: 'Pending Errors',
+            tab: 'custpage_tab_errors'
+        });
+
+        errorSublist.addField({ id: 'custpage_err_id', type: serverWidget.FieldType.TEXT, label: 'ID' });
+        errorSublist.addField({ id: 'custpage_err_type', type: serverWidget.FieldType.TEXT, label: 'Type' });
+        errorSublist.addField({ id: 'custpage_err_ref', type: serverWidget.FieldType.TEXT, label: 'Amazon Ref' });
+        errorSublist.addField({ id: 'custpage_err_msg', type: serverWidget.FieldType.TEXT, label: 'Error' });
+        errorSublist.addField({ id: 'custpage_err_retries', type: serverWidget.FieldType.TEXT, label: 'Retries' });
+        errorSublist.addField({ id: 'custpage_err_status', type: serverWidget.FieldType.TEXT, label: 'Status' });
+        errorSublist.addField({ id: 'custpage_err_next', type: serverWidget.FieldType.TEXT, label: 'Next Retry' });
+
+        populateErrorQueue(errorSublist);
+
+        // -- Item Mapping Stats Tab --
+        const mappingTab = form.addTab({ id: 'custpage_tab_mapping', label: 'Item Mapping' });
+
+        const mappingSublist = form.addSublist({
+            id: 'custpage_sl_mapping',
+            type: serverWidget.SublistType.LIST,
+            label: 'Mapping Summary',
+            tab: 'custpage_tab_mapping'
+        });
+
+        mappingSublist.addField({ id: 'custpage_map_config', type: serverWidget.FieldType.TEXT, label: 'Config' });
+        mappingSublist.addField({ id: 'custpage_map_total', type: serverWidget.FieldType.TEXT, label: 'Total Items' });
+        mappingSublist.addField({ id: 'custpage_map_mapped', type: serverWidget.FieldType.TEXT, label: 'Mapped' });
+        mappingSublist.addField({ id: 'custpage_map_unmapped', type: serverWidget.FieldType.TEXT, label: 'Unmapped' });
+
+        populateMappingStats(mappingSublist);
 
         context.response.writePage(form);
     }
@@ -211,19 +251,18 @@ define([
         const action = context.request.parameters.custpage_action;
 
         try {
-            switch (action) {
-                case 'orders':
-                    triggerScheduledScript(constants.SCRIPT_IDS.SCHED_ORDER_SYNC, constants.DEPLOY_IDS.SCHED_ORDER_SYNC);
-                    break;
-                case 'inventory':
-                    triggerScheduledScript(constants.SCRIPT_IDS.SCHED_INV_SYNC, constants.DEPLOY_IDS.SCHED_INV_SYNC);
-                    break;
-                case 'settlements':
-                    triggerScheduledScript(constants.SCRIPT_IDS.SCHED_SETTLE_SYNC, constants.DEPLOY_IDS.SCHED_SETTLE_SYNC);
-                    break;
-                case 'returns':
-                    triggerScheduledScript(constants.SCRIPT_IDS.SCHED_RETURN_SYNC, constants.DEPLOY_IDS.SCHED_RETURN_SYNC);
-                    break;
+            const syncMap = {
+                orders: { s: constants.SCRIPT_IDS.SCHED_ORDER_SYNC, d: constants.DEPLOY_IDS.SCHED_ORDER_SYNC },
+                inventory: { s: constants.SCRIPT_IDS.SCHED_INV_SYNC, d: constants.DEPLOY_IDS.SCHED_INV_SYNC },
+                settlements: { s: constants.SCRIPT_IDS.SCHED_SETTLE_SYNC, d: constants.DEPLOY_IDS.SCHED_SETTLE_SYNC },
+                returns: { s: constants.SCRIPT_IDS.SCHED_RETURN_SYNC, d: constants.DEPLOY_IDS.SCHED_RETURN_SYNC },
+                pricing: { s: constants.SCRIPT_IDS.SCHED_PRICING_SYNC, d: constants.DEPLOY_IDS.SCHED_PRICING_SYNC },
+                catalog: { s: constants.SCRIPT_IDS.SCHED_CATALOG_SYNC, d: constants.DEPLOY_IDS.SCHED_CATALOG_SYNC },
+                errors: { s: constants.SCRIPT_IDS.SCHED_ERROR_RETRY, d: constants.DEPLOY_IDS.SCHED_ERROR_RETRY }
+            };
+            const syncInfo = syncMap[action];
+            if (syncInfo) {
+                triggerScheduledScript(syncInfo.s, syncInfo.d);
             }
         } catch (e) {
             log.error({ title: 'Dashboard Action Error', details: e.message });
@@ -248,6 +287,73 @@ define([
         const taskId = scriptTask.submit();
         logger.success(constants.LOG_TYPE.API_CALL,
             'Manual sync triggered: ' + scriptId + ' (Task: ' + taskId + ')');
+    }
+
+    /**
+     * Populates the error queue tab.
+     */
+    function populateErrorQueue(sublist) {
+        const EQ = CR.ERROR_QUEUE;
+        let line = 0;
+
+        search.create({
+            type: EQ.ID,
+            filters: [
+                [EQ.FIELDS.STATUS, 'anyof', [
+                    constants.ERROR_QUEUE_STATUS.PENDING,
+                    constants.ERROR_QUEUE_STATUS.RETRYING
+                ]]
+            ],
+            columns: [
+                search.createColumn({ name: EQ.FIELDS.TYPE }),
+                search.createColumn({ name: EQ.FIELDS.AMAZON_REF }),
+                search.createColumn({ name: EQ.FIELDS.ERROR_MSG }),
+                search.createColumn({ name: EQ.FIELDS.RETRY_COUNT }),
+                search.createColumn({ name: EQ.FIELDS.STATUS }),
+                search.createColumn({ name: EQ.FIELDS.NEXT_RETRY })
+            ]
+        }).run().getRange({ start: 0, end: 50 }).forEach(function (result) {
+            sublist.setSublistValue({ id: 'custpage_err_id', line: line, value: result.id });
+            sublist.setSublistValue({ id: 'custpage_err_type', line: line, value: result.getValue(EQ.FIELDS.TYPE) || '-' });
+            sublist.setSublistValue({ id: 'custpage_err_ref', line: line, value: result.getValue(EQ.FIELDS.AMAZON_REF) || '-' });
+            sublist.setSublistValue({ id: 'custpage_err_msg', line: line, value: (result.getValue(EQ.FIELDS.ERROR_MSG) || '-').substring(0, 150) });
+            sublist.setSublistValue({ id: 'custpage_err_retries', line: line, value: result.getValue(EQ.FIELDS.RETRY_COUNT) || '0' });
+            sublist.setSublistValue({ id: 'custpage_err_status', line: line, value: result.getText(EQ.FIELDS.STATUS) || '-' });
+            sublist.setSublistValue({ id: 'custpage_err_next', line: line, value: result.getValue(EQ.FIELDS.NEXT_RETRY) || '-' });
+            line++;
+        });
+    }
+
+    /**
+     * Populates item mapping statistics per config.
+     */
+    function populateMappingStats(sublist) {
+        const IM = CR.ITEM_MAP;
+        const configs = configHelper.getAllConfigs();
+
+        configs.forEach(function (config, idx) {
+            let total = 0;
+            let mapped = 0;
+
+            search.create({
+                type: IM.ID,
+                filters: [
+                    [IM.FIELDS.CONFIG, 'anyof', config.configId],
+                    'AND',
+                    ['isinactive', 'is', 'F']
+                ],
+                columns: [IM.FIELDS.NS_ITEM]
+            }).run().each(function (result) {
+                total++;
+                if (result.getValue(IM.FIELDS.NS_ITEM)) mapped++;
+                return true;
+            });
+
+            sublist.setSublistValue({ id: 'custpage_map_config', line: idx, value: config.configId + ' (' + (config.marketplaceId || '-') + ')' });
+            sublist.setSublistValue({ id: 'custpage_map_total', line: idx, value: String(total) });
+            sublist.setSublistValue({ id: 'custpage_map_mapped', line: idx, value: String(mapped) });
+            sublist.setSublistValue({ id: 'custpage_map_unmapped', line: idx, value: String(total - mapped) });
+        });
     }
 
     return { onRequest };

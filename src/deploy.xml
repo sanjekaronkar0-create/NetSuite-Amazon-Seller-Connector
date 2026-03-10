@@ -22,6 +22,12 @@
         <path>~/Objects/customscript_amz_ue_fulfill.xml</path>
         <path>~/Objects/customscript_amz_rl_webhook.xml</path>
         <path>~/Objects/customscript_amz_cs_config.xml</path>
+        <path>~/Objects/customrecord_amz_error_queue.xml</path>
+        <path>~/Objects/customscript_amz_ss_pricing_sync.xml</path>
+        <path>~/Objects/customscript_amz_ss_catalog_sync.xml</path>
+        <path>~/Objects/customscript_amz_ss_error_retry.xml</path>
+        <path>~/Objects/customscript_amz_mr_settle_process.xml</path>
+        <path>~/Objects/customscript_amz_mr_return_process.xml</path>
     </objects>
     <translationimports>
         <path>~/Translations/*</path>

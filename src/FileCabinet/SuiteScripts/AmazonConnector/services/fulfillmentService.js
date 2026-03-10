@@ -156,15 +156,17 @@ define([
 
     /**
      * Maps NetSuite ship method to Amazon carrier name.
+     * Uses comprehensive carrier map from constants.
      */
     function mapCarrier(shipMethodText) {
         if (!shipMethodText) return 'Other';
         const text = shipMethodText.toLowerCase();
 
-        if (text.includes('ups')) return 'UPS';
-        if (text.includes('fedex')) return 'FedEx';
-        if (text.includes('usps') || text.includes('postal')) return 'USPS';
-        if (text.includes('dhl')) return 'DHL';
+        const carrierMap = constants.CARRIER_MAP;
+        for (const key in carrierMap) {
+            if (text.includes(key)) return carrierMap[key];
+        }
+
         return 'Other';
     }
 

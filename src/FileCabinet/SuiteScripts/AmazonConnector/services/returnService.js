@@ -171,12 +171,29 @@ define([
         });
     }
 
+    /**
+     * Updates a return mapping record with a credit memo reference.
+     * @param {number} returnMapId
+     * @param {number} creditMemoId
+     */
+    function updateReturnCreditMemo(returnMapId, creditMemoId) {
+        record.submitFields({
+            type: RM.ID,
+            id: returnMapId,
+            values: {
+                [RM.FIELDS.NS_CREDIT_MEMO]: creditMemoId,
+                [RM.FIELDS.STATUS]: constants.RETURN_STATUS.CREDIT_ISSUED
+            }
+        });
+    }
+
     return {
         requestReturnsReport,
         isReturnProcessed,
         getLinkedSalesOrder,
         createReturnAuthorization,
         createReturnMapRecord,
-        updateReturnStatus
+        updateReturnStatus,
+        updateReturnCreditMemo
     };
 });

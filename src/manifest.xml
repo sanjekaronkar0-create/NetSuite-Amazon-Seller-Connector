@@ -6,6 +6,10 @@
       <feature required="true">SERVERSIDESCRIPTING</feature>
       <feature required="true">CUSTOMRECORDS</feature>
       <feature required="true">ADVANCEDPRINTING</feature>
+      <feature required="true">CREATESUITEBUNDLES</feature>
+      <feature required="false">SUBSIDIARIES</feature>
+      <feature required="false">MULTICURRENCY</feature>
+      <feature required="false">MULTILOCINVT</feature>
     </features>
   </dependencies>
 </manifest>

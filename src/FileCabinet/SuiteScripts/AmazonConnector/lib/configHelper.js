@@ -2,6 +2,8 @@
  * @NApiVersion 2.1
  * @NModuleScope Public
  * @description Loads and manages Amazon Connector configuration records.
+ *              Supports all sync toggles, financial accounts, FBA settings,
+ *              and multi-marketplace configuration.
  */
 define(['N/search', 'N/record', 'N/log', './constants'], function (search, record, log, constants) {
 
@@ -13,32 +15,11 @@ define(['N/search', 'N/record', 'N/log', './constants'], function (search, recor
      */
     function getAllConfigs() {
         const configs = [];
-        const configSearch = search.create({
+        search.create({
             type: CR.ID,
             filters: [['isinactive', 'is', 'F']],
-            columns: [
-                CR.FIELDS.SELLER_ID,
-                CR.FIELDS.CLIENT_ID,
-                CR.FIELDS.CLIENT_SECRET,
-                CR.FIELDS.REFRESH_TOKEN,
-                CR.FIELDS.ENDPOINT,
-                CR.FIELDS.MARKETPLACE_ID,
-                CR.FIELDS.SUBSIDIARY,
-                CR.FIELDS.LOCATION,
-                CR.FIELDS.ORDER_ENABLED,
-                CR.FIELDS.INV_ENABLED,
-                CR.FIELDS.FULFILL_ENABLED,
-                CR.FIELDS.SETTLE_ENABLED,
-                CR.FIELDS.RETURN_ENABLED,
-                CR.FIELDS.LAST_ORDER_SYNC,
-                CR.FIELDS.LAST_INV_SYNC,
-                CR.FIELDS.LAST_SETTLE_SYNC,
-                CR.FIELDS.PAYMENT_METHOD,
-                CR.FIELDS.CUSTOMER
-            ]
-        });
-
-        configSearch.run().each(function (result) {
+            columns: Object.values(CR.FIELDS)
+        }).run().each(function (result) {
             configs.push(mapResultToConfig(result));
             return true;
         });
@@ -53,34 +34,11 @@ define(['N/search', 'N/record', 'N/log', './constants'], function (search, recor
      */
     function getConfig(configId) {
         const rec = record.load({ type: CR.ID, id: configId });
-        return {
-            configId: String(configId),
-            sellerId: rec.getValue({ fieldId: CR.FIELDS.SELLER_ID }),
-            clientId: rec.getValue({ fieldId: CR.FIELDS.CLIENT_ID }),
-            clientSecret: rec.getValue({ fieldId: CR.FIELDS.CLIENT_SECRET }),
-            refreshToken: rec.getValue({ fieldId: CR.FIELDS.REFRESH_TOKEN }),
-            endpoint: rec.getValue({ fieldId: CR.FIELDS.ENDPOINT }),
-            marketplaceId: rec.getValue({ fieldId: CR.FIELDS.MARKETPLACE_ID }),
-            subsidiary: rec.getValue({ fieldId: CR.FIELDS.SUBSIDIARY }),
-            location: rec.getValue({ fieldId: CR.FIELDS.LOCATION }),
-            orderEnabled: rec.getValue({ fieldId: CR.FIELDS.ORDER_ENABLED }),
-            invEnabled: rec.getValue({ fieldId: CR.FIELDS.INV_ENABLED }),
-            fulfillEnabled: rec.getValue({ fieldId: CR.FIELDS.FULFILL_ENABLED }),
-            settleEnabled: rec.getValue({ fieldId: CR.FIELDS.SETTLE_ENABLED }),
-            returnEnabled: rec.getValue({ fieldId: CR.FIELDS.RETURN_ENABLED }),
-            lastOrderSync: rec.getValue({ fieldId: CR.FIELDS.LAST_ORDER_SYNC }),
-            lastInvSync: rec.getValue({ fieldId: CR.FIELDS.LAST_INV_SYNC }),
-            lastSettleSync: rec.getValue({ fieldId: CR.FIELDS.LAST_SETTLE_SYNC }),
-            paymentMethod: rec.getValue({ fieldId: CR.FIELDS.PAYMENT_METHOD }),
-            customer: rec.getValue({ fieldId: CR.FIELDS.CUSTOMER })
-        };
+        return mapRecordToConfig(rec, configId);
     }
 
     /**
      * Updates the last sync timestamp on a config record.
-     * @param {string|number} configId
-     * @param {string} fieldId - The timestamp field to update
-     * @param {Date} [timestamp] - Defaults to now
      */
     function updateLastSync(configId, fieldId, timestamp) {
         record.submitFields({
@@ -96,24 +54,116 @@ define(['N/search', 'N/record', 'N/log', './constants'], function (search, recor
     function mapResultToConfig(result) {
         return {
             configId: result.id,
+            // SP-API Credentials
             sellerId: result.getValue(CR.FIELDS.SELLER_ID),
             clientId: result.getValue(CR.FIELDS.CLIENT_ID),
             clientSecret: result.getValue(CR.FIELDS.CLIENT_SECRET),
             refreshToken: result.getValue(CR.FIELDS.REFRESH_TOKEN),
             endpoint: result.getValue(CR.FIELDS.ENDPOINT),
             marketplaceId: result.getValue(CR.FIELDS.MARKETPLACE_ID),
+            // NetSuite Mapping
             subsidiary: result.getValue(CR.FIELDS.SUBSIDIARY),
             location: result.getValue(CR.FIELDS.LOCATION),
+            customer: result.getValue(CR.FIELDS.CUSTOMER),
+            paymentMethod: result.getValue(CR.FIELDS.PAYMENT_METHOD),
+            // Sync Toggles
             orderEnabled: result.getValue(CR.FIELDS.ORDER_ENABLED),
             invEnabled: result.getValue(CR.FIELDS.INV_ENABLED),
             fulfillEnabled: result.getValue(CR.FIELDS.FULFILL_ENABLED),
             settleEnabled: result.getValue(CR.FIELDS.SETTLE_ENABLED),
             returnEnabled: result.getValue(CR.FIELDS.RETURN_ENABLED),
+            pricingEnabled: result.getValue(CR.FIELDS.PRICING_ENABLED),
+            catalogEnabled: result.getValue(CR.FIELDS.CATALOG_ENABLED),
+            // Last Sync Timestamps
             lastOrderSync: result.getValue(CR.FIELDS.LAST_ORDER_SYNC),
             lastInvSync: result.getValue(CR.FIELDS.LAST_INV_SYNC),
             lastSettleSync: result.getValue(CR.FIELDS.LAST_SETTLE_SYNC),
-            paymentMethod: result.getValue(CR.FIELDS.PAYMENT_METHOD),
-            customer: result.getValue(CR.FIELDS.CUSTOMER)
+            lastReturnSync: result.getValue(CR.FIELDS.LAST_RETURN_SYNC),
+            lastPricingSync: result.getValue(CR.FIELDS.LAST_PRICING_SYNC),
+            lastCatalogSync: result.getValue(CR.FIELDS.LAST_CATALOG_SYNC),
+            // Order Configuration
+            orderType: result.getValue(CR.FIELDS.ORDER_TYPE),
+            salesOrderForm: result.getValue(CR.FIELDS.SALES_ORDER_FORM),
+            cashSaleForm: result.getValue(CR.FIELDS.CASH_SALE_FORM),
+            // Financial Accounts
+            settleAccount: result.getValue(CR.FIELDS.SETTLE_ACCOUNT),
+            feeAccount: result.getValue(CR.FIELDS.FEE_ACCOUNT),
+            fbaFeeAccount: result.getValue(CR.FIELDS.FBA_FEE_ACCOUNT),
+            refundAccount: result.getValue(CR.FIELDS.REFUND_ACCOUNT),
+            promoAccount: result.getValue(CR.FIELDS.PROMO_ACCOUNT),
+            shippingItem: result.getValue(CR.FIELDS.SHIPPING_ITEM),
+            discountItem: result.getValue(CR.FIELDS.DISCOUNT_ITEM),
+            // FBA Settings
+            fbaEnabled: result.getValue(CR.FIELDS.FBA_ENABLED),
+            fbaLocation: result.getValue(CR.FIELDS.FBA_LOCATION),
+            fbaCustomer: result.getValue(CR.FIELDS.FBA_CUSTOMER),
+            // Automation Flags
+            autoCreditMemo: result.getValue(CR.FIELDS.AUTO_CREDIT_MEMO),
+            autoDeposit: result.getValue(CR.FIELDS.AUTO_DEPOSIT),
+            // Tax
+            taxItem: result.getValue(CR.FIELDS.TAX_ITEM),
+            taxCode: result.getValue(CR.FIELDS.TAX_CODE),
+            // Error Retry
+            maxRetries: parseInt(result.getValue(CR.FIELDS.MAX_RETRIES), 10) || 3,
+            retryDelayMins: parseInt(result.getValue(CR.FIELDS.RETRY_DELAY_MINS), 10) || 30,
+            // Multi-marketplace
+            additionalMarketplaceIds: result.getValue(CR.FIELDS.ADDITIONAL_MARKETPLACE_IDS)
+        };
+    }
+
+    /**
+     * Maps a loaded record to a config object.
+     */
+    function mapRecordToConfig(rec, configId) {
+        const getValue = function (fieldId) {
+            try { return rec.getValue({ fieldId: fieldId }); } catch (e) { return null; }
+        };
+
+        return {
+            configId: String(configId),
+            sellerId: getValue(CR.FIELDS.SELLER_ID),
+            clientId: getValue(CR.FIELDS.CLIENT_ID),
+            clientSecret: getValue(CR.FIELDS.CLIENT_SECRET),
+            refreshToken: getValue(CR.FIELDS.REFRESH_TOKEN),
+            endpoint: getValue(CR.FIELDS.ENDPOINT),
+            marketplaceId: getValue(CR.FIELDS.MARKETPLACE_ID),
+            subsidiary: getValue(CR.FIELDS.SUBSIDIARY),
+            location: getValue(CR.FIELDS.LOCATION),
+            customer: getValue(CR.FIELDS.CUSTOMER),
+            paymentMethod: getValue(CR.FIELDS.PAYMENT_METHOD),
+            orderEnabled: getValue(CR.FIELDS.ORDER_ENABLED),
+            invEnabled: getValue(CR.FIELDS.INV_ENABLED),
+            fulfillEnabled: getValue(CR.FIELDS.FULFILL_ENABLED),
+            settleEnabled: getValue(CR.FIELDS.SETTLE_ENABLED),
+            returnEnabled: getValue(CR.FIELDS.RETURN_ENABLED),
+            pricingEnabled: getValue(CR.FIELDS.PRICING_ENABLED),
+            catalogEnabled: getValue(CR.FIELDS.CATALOG_ENABLED),
+            lastOrderSync: getValue(CR.FIELDS.LAST_ORDER_SYNC),
+            lastInvSync: getValue(CR.FIELDS.LAST_INV_SYNC),
+            lastSettleSync: getValue(CR.FIELDS.LAST_SETTLE_SYNC),
+            lastReturnSync: getValue(CR.FIELDS.LAST_RETURN_SYNC),
+            lastPricingSync: getValue(CR.FIELDS.LAST_PRICING_SYNC),
+            lastCatalogSync: getValue(CR.FIELDS.LAST_CATALOG_SYNC),
+            orderType: getValue(CR.FIELDS.ORDER_TYPE),
+            salesOrderForm: getValue(CR.FIELDS.SALES_ORDER_FORM),
+            cashSaleForm: getValue(CR.FIELDS.CASH_SALE_FORM),
+            settleAccount: getValue(CR.FIELDS.SETTLE_ACCOUNT),
+            feeAccount: getValue(CR.FIELDS.FEE_ACCOUNT),
+            fbaFeeAccount: getValue(CR.FIELDS.FBA_FEE_ACCOUNT),
+            refundAccount: getValue(CR.FIELDS.REFUND_ACCOUNT),
+            promoAccount: getValue(CR.FIELDS.PROMO_ACCOUNT),
+            shippingItem: getValue(CR.FIELDS.SHIPPING_ITEM),
+            discountItem: getValue(CR.FIELDS.DISCOUNT_ITEM),
+            fbaEnabled: getValue(CR.FIELDS.FBA_ENABLED),
+            fbaLocation: getValue(CR.FIELDS.FBA_LOCATION),
+            fbaCustomer: getValue(CR.FIELDS.FBA_CUSTOMER),
+            autoCreditMemo: getValue(CR.FIELDS.AUTO_CREDIT_MEMO),
+            autoDeposit: getValue(CR.FIELDS.AUTO_DEPOSIT),
+            taxItem: getValue(CR.FIELDS.TAX_ITEM),
+            taxCode: getValue(CR.FIELDS.TAX_CODE),
+            maxRetries: parseInt(getValue(CR.FIELDS.MAX_RETRIES), 10) || 3,
+            retryDelayMins: parseInt(getValue(CR.FIELDS.RETRY_DELAY_MINS), 10) || 30,
+            additionalMarketplaceIds: getValue(CR.FIELDS.ADDITIONAL_MARKETPLACE_IDS)
         };
     }
 
