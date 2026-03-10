@@ -74,7 +74,7 @@
     <customrecordcustomfield scriptid="custrecord_amz_log_timestamp">
       <label>Timestamp</label>
       <fieldtype>DATETIMETZ</fieldtype>
-      <displaytype>INLINE</displaytype>
+      <displaytype>READONLY</displaytype>
     </customrecordcustomfield>
 
   </customrecordcustomfields>

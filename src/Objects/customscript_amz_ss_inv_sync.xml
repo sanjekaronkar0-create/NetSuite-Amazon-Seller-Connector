@@ -7,7 +7,7 @@
   <notifyowner>T</notifyowner>
   <scriptdeployments>
     <scriptdeployment scriptid="customdeploy_amz_ss_inv_sync">
-      <status>RELEASED</status>
+      <status>NOTSCHEDULED</status>
       <title>Amazon Inventory Sync Deployment</title>
       <isdeployed>T</isdeployed>
       <loglevel>DEBUG</loglevel>

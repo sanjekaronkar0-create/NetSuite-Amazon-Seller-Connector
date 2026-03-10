@@ -5,13 +5,6 @@
   <isinactive>F</isinactive>
   <notifyadmins>T</notifyadmins>
   <notifyowner>T</notifyowner>
-  <scriptcustomfields>
-    <scriptcustomfield scriptid="custscript_amz_mr_inv_config_id">
-      <label>Configuration ID</label>
-      <fieldtype>TEXT</fieldtype>
-      <description>Internal ID of the Amazon Connector Config record to process.</description>
-    </scriptcustomfield>
-  </scriptcustomfields>
   <scriptdeployments>
     <scriptdeployment scriptid="customdeploy_amz_mr_inv_export">
       <status>RELEASED</status>
