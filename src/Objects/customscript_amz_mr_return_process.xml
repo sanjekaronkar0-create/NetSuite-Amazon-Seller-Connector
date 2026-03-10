@@ -1,0 +1,20 @@
+<mapreducescript scriptid="customscript_amz_mr_return_process">
+  <name>Amazon - Return Processing M/R</name>
+  <scriptfile>[/SuiteScripts/AmazonConnector/mapreduce/mr_return_process.js]</scriptfile>
+  <description>Bulk processes Amazon returns - creates RMAs and Credit Memos</description>
+  <isinactive>F</isinactive>
+  <scriptdeployments>
+    <scriptdeployment scriptid="customdeploy_amz_mr_return_process">
+      <status>RELEASED</status>
+      <title>Amazon Return M/R Deployment</title>
+      <isdeployed>T</isdeployed>
+      <loglevel>DEBUG</loglevel>
+      <scriptparams>
+        <scriptparam scriptid="custscript_amz_mr_return_data">
+          <label>Return Data (JSON)</label>
+          <fieldtype>CLOBTEXT</fieldtype>
+        </scriptparam>
+      </scriptparams>
+    </scriptdeployment>
+  </scriptdeployments>
+</mapreducescript>

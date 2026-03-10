@@ -1,0 +1,21 @@
+<scheduledscript scriptid="customscript_amz_ss_order_sync">
+  <name>Amazon - Order Sync (Scheduled)</name>
+  <scriptfile>[/SuiteScripts/AmazonConnector/scheduled/ss_order_sync.js]</scriptfile>
+  <description>Polls Amazon SP-API for new orders and triggers Map/Reduce import.</description>
+  <isinactive>F</isinactive>
+  <notifyadmins>T</notifyadmins>
+  <notifyowner>T</notifyowner>
+  <scriptdeployments>
+    <scriptdeployment scriptid="customdeploy_amz_ss_order_sync">
+      <status>RELEASED</status>
+      <title>Amazon Order Sync Deployment</title>
+      <isdeployed>T</isdeployed>
+      <loglevel>DEBUG</loglevel>
+      <recurrence>
+        <single>
+          <repeat>EVERY_THIRTY_MINUTES</repeat>
+        </single>
+      </recurrence>
+    </scriptdeployment>
+  </scriptdeployments>
+</scheduledscript>

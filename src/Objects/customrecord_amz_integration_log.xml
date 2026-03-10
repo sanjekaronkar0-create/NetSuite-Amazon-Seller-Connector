@@ -1,0 +1,110 @@
+<customrecordtype scriptid="customrecord_amz_integration_log">
+  <recordname>Amazon Integration Log</recordname>
+  <includename>F</includename>
+  <isinactive>F</isinactive>
+  <allowinlinemassupdate>F</allowinlinemassupdate>
+  <allowquickadd>F</allowquickadd>
+  <allowquicksearch>T</allowquicksearch>
+  <allowuiaccess>T</allowuiaccess>
+  <description>Logs all Amazon connector integration events, errors, and API calls.</description>
+  <enablenumbering>T</enablenumbering>
+  <numberingprefix>AMZLOG-</numberingprefix>
+  <enableoptimisticlocking>F</enableoptimisticlocking>
+  <enablesystemnotestream>F</enablesystemnotestream>
+  <iconbuiltin>T</iconbuiltin>
+  <iconindex>22</iconindex>
+  <customrecordcustomfields>
+
+    <customrecordcustomfield scriptid="custrecord_amz_log_type">
+      <label>Log Type</label>
+      <fieldtype>SELECT</fieldtype>
+      <ismandatory>T</ismandatory>
+      <displaytype>NORMAL</displaytype>
+      <customfieldfilters/>
+      <selectoption scriptid="custrecord_amz_log_type_1">
+        <value>Order Sync</value>
+      </selectoption>
+      <selectoption scriptid="custrecord_amz_log_type_2">
+        <value>Inventory Sync</value>
+      </selectoption>
+      <selectoption scriptid="custrecord_amz_log_type_3">
+        <value>Fulfillment Sync</value>
+      </selectoption>
+      <selectoption scriptid="custrecord_amz_log_type_4">
+        <value>Settlement Sync</value>
+      </selectoption>
+      <selectoption scriptid="custrecord_amz_log_type_5">
+        <value>Return Sync</value>
+      </selectoption>
+      <selectoption scriptid="custrecord_amz_log_type_6">
+        <value>API Call</value>
+      </selectoption>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_log_status">
+      <label>Status</label>
+      <fieldtype>SELECT</fieldtype>
+      <ismandatory>T</ismandatory>
+      <displaytype>NORMAL</displaytype>
+      <selectoption scriptid="custrecord_amz_log_status_1">
+        <value>Success</value>
+      </selectoption>
+      <selectoption scriptid="custrecord_amz_log_status_2">
+        <value>Error</value>
+      </selectoption>
+      <selectoption scriptid="custrecord_amz_log_status_3">
+        <value>Warning</value>
+      </selectoption>
+      <selectoption scriptid="custrecord_amz_log_status_4">
+        <value>In Progress</value>
+      </selectoption>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_log_message">
+      <label>Message</label>
+      <fieldtype>CLOBTEXT</fieldtype>
+      <displaytype>NORMAL</displaytype>
+      <description>Detailed log message</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_log_details">
+      <label>Details / Stack Trace</label>
+      <fieldtype>CLOBTEXT</fieldtype>
+      <displaytype>NORMAL</displaytype>
+      <description>Full error details, stack trace, or API response body</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_log_record_type">
+      <label>Related Record Type</label>
+      <fieldtype>CLOBTEXT</fieldtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_log_record_id">
+      <label>Related Record ID</label>
+      <fieldtype>CLOBTEXT</fieldtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_log_amazon_ref">
+      <label>Amazon Reference</label>
+      <fieldtype>CLOBTEXT</fieldtype>
+      <displaytype>NORMAL</displaytype>
+      <description>Amazon Order ID, ASIN, or other Amazon reference</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_log_config">
+      <label>Configuration</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>[scriptid=customrecord_amz_connector_config]</selectrecordtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_log_timestamp">
+      <label>Timestamp</label>
+      <fieldtype>DATETIMETZ</fieldtype>
+      <displaytype>DISABLED</displaytype>
+    </customrecordcustomfield>
+
+  </customrecordcustomfields>
+</customrecordtype>

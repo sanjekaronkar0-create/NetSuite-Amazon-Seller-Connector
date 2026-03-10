@@ -1,0 +1,22 @@
+<scheduledscript scriptid="customscript_amz_ss_error_retry">
+  <name>Amazon - Error Retry Processor</name>
+  <scriptfile>[/SuiteScripts/AmazonConnector/scheduled/ss_error_retry.js]</scriptfile>
+  <description>Processes failed operations from the error queue with exponential backoff</description>
+  <isinactive>F</isinactive>
+  <scriptdeployments>
+    <scriptdeployment scriptid="customdeploy_amz_ss_error_retry">
+      <status>RELEASED</status>
+      <title>Amazon Error Retry Deployment</title>
+      <isdeployed>T</isdeployed>
+      <loglevel>DEBUG</loglevel>
+      <recurrence>
+        <single>
+          <repeat>
+            <frequency>MINUTES</frequency>
+            <every>30</every>
+          </repeat>
+        </single>
+      </recurrence>
+    </scriptdeployment>
+  </scriptdeployments>
+</scheduledscript>

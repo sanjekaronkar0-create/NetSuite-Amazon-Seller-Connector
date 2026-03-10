@@ -1,0 +1,22 @@
+<scheduledscript scriptid="customscript_amz_ss_catalog_sync">
+  <name>Amazon - Catalog Sync</name>
+  <scriptfile>[/SuiteScripts/AmazonConnector/scheduled/ss_catalog_sync.js]</scriptfile>
+  <description>Downloads Amazon active listings and syncs to item mapping records</description>
+  <isinactive>F</isinactive>
+  <scriptdeployments>
+    <scriptdeployment scriptid="customdeploy_amz_ss_catalog_sync">
+      <status>RELEASED</status>
+      <title>Amazon Catalog Sync Deployment</title>
+      <isdeployed>T</isdeployed>
+      <loglevel>DEBUG</loglevel>
+      <recurrence>
+        <single>
+          <repeat>
+            <frequency>HOURS</frequency>
+            <every>12</every>
+          </repeat>
+        </single>
+      </recurrence>
+    </scriptdeployment>
+  </scriptdeployments>
+</scheduledscript>

@@ -1,0 +1,94 @@
+<customrecordtype scriptid="customrecord_amz_return_map">
+  <recordname>Amazon Return Mapping</recordname>
+  <includename>F</includename>
+  <isinactive>F</isinactive>
+  <allowinlinemassupdate>F</allowinlinemassupdate>
+  <allowquickadd>F</allowquickadd>
+  <allowquicksearch>T</allowquicksearch>
+  <allowuiaccess>T</allowuiaccess>
+  <description>Maps Amazon return/refund requests to NetSuite return authorizations and credit memos.</description>
+  <enablenumbering>T</enablenumbering>
+  <numberingprefix>AMZRET-</numberingprefix>
+  <enableoptimisticlocking>T</enableoptimisticlocking>
+  <enablesystemnotestream>T</enablesystemnotestream>
+  <iconbuiltin>T</iconbuiltin>
+  <iconindex>16</iconindex>
+  <customrecordcustomfields>
+
+    <customrecordcustomfield scriptid="custrecord_amz_ret_amazon_order_id">
+      <label>Amazon Order ID</label>
+      <fieldtype>CLOBTEXT</fieldtype>
+      <ismandatory>T</ismandatory>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_ret_return_id">
+      <label>Amazon Return ID</label>
+      <fieldtype>CLOBTEXT</fieldtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_ret_reason">
+      <label>Return Reason</label>
+      <fieldtype>CLOBTEXT</fieldtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_ret_refund_amount">
+      <label>Refund Amount</label>
+      <fieldtype>CURRENCY</fieldtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_ret_ns_rma">
+      <label>NetSuite Return Authorization</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>-32</selectrecordtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_ret_ns_credit_memo">
+      <label>NetSuite Credit Memo</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>-20</selectrecordtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_ret_status">
+      <label>Status</label>
+      <fieldtype>SELECT</fieldtype>
+      <ismandatory>T</ismandatory>
+      <displaytype>NORMAL</displaytype>
+      <selectoption scriptid="custrecord_amz_ret_status_1">
+        <value>Pending</value>
+      </selectoption>
+      <selectoption scriptid="custrecord_amz_ret_status_2">
+        <value>Processed</value>
+      </selectoption>
+      <selectoption scriptid="custrecord_amz_ret_status_3">
+        <value>Error</value>
+      </selectoption>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_ret_order_map">
+      <label>Order Mapping</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>[scriptid=customrecord_amz_order_map]</selectrecordtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_ret_config">
+      <label>Configuration</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>[scriptid=customrecord_amz_connector_config]</selectrecordtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_ret_date">
+      <label>Return Date</label>
+      <fieldtype>DATETIMETZ</fieldtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+  </customrecordcustomfields>
+</customrecordtype>

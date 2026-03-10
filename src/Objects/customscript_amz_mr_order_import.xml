@@ -1,0 +1,23 @@
+<mapreducescript scriptid="customscript_amz_mr_order_import">
+  <name>Amazon - Order Import (Map/Reduce)</name>
+  <scriptfile>[/SuiteScripts/AmazonConnector/mapreduce/mr_order_import.js]</scriptfile>
+  <description>Imports Amazon orders into NetSuite Sales Orders using Map/Reduce for governance.</description>
+  <isinactive>F</isinactive>
+  <notifyadmins>T</notifyadmins>
+  <notifyowner>T</notifyowner>
+  <scriptparameters>
+    <scriptparameter scriptid="custscript_amz_mr_order_data">
+      <label>Order Data JSON</label>
+      <type>CLOBTEXT</type>
+      <description>JSON payload containing config ID and Amazon orders to import.</description>
+    </scriptparameter>
+  </scriptparameters>
+  <scriptdeployments>
+    <scriptdeployment scriptid="customdeploy_amz_mr_order_import">
+      <status>RELEASED</status>
+      <title>Amazon Order Import Deployment</title>
+      <isdeployed>T</isdeployed>
+      <loglevel>DEBUG</loglevel>
+    </scriptdeployment>
+  </scriptdeployments>
+</mapreducescript>

@@ -1,0 +1,23 @@
+<mapreducescript scriptid="customscript_amz_mr_inv_export">
+  <name>Amazon - Inventory Export (Map/Reduce)</name>
+  <scriptfile>[/SuiteScripts/AmazonConnector/mapreduce/mr_inventory_export.js]</scriptfile>
+  <description>Reads NetSuite inventory levels and submits inventory feed to Amazon SP-API.</description>
+  <isinactive>F</isinactive>
+  <notifyadmins>T</notifyadmins>
+  <notifyowner>T</notifyowner>
+  <scriptparameters>
+    <scriptparameter scriptid="custscript_amz_mr_inv_config_id">
+      <label>Configuration ID</label>
+      <type>TEXT</type>
+      <description>Internal ID of the Amazon Connector Config record to process.</description>
+    </scriptparameter>
+  </scriptparameters>
+  <scriptdeployments>
+    <scriptdeployment scriptid="customdeploy_amz_mr_inv_export">
+      <status>RELEASED</status>
+      <title>Amazon Inventory Export Deployment</title>
+      <isdeployed>T</isdeployed>
+      <loglevel>DEBUG</loglevel>
+    </scriptdeployment>
+  </scriptdeployments>
+</mapreducescript>
