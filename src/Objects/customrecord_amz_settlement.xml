@@ -1,0 +1,126 @@
+<customrecordtype scriptid="customrecord_amz_settlement">
+  <recordname>Amazon Settlement</recordname>
+  <includename>F</includename>
+  <isinactive>F</isinactive>
+  <allowinlinemassupdate>F</allowinlinemassupdate>
+  <allowquickadd>F</allowquickadd>
+  <allowquicksearch>T</allowquicksearch>
+  <allowuiaccess>T</allowuiaccess>
+  <description>Tracks Amazon settlement reports and reconciles with NetSuite payment records.</description>
+  <enablenumbering>T</enablenumbering>
+  <numberingprefix>AMZSTL-</numberingprefix>
+  <enableoptimisticlocking>T</enableoptimisticlocking>
+  <enablesystemnotestream>T</enablesystemnotestream>
+  <iconbuiltin>T</iconbuiltin>
+  <iconindex>12</iconindex>
+  <customrecordcustomfields>
+
+    <customrecordcustomfield scriptid="custrecord_amz_stl_report_id">
+      <label>Settlement Report ID</label>
+      <fieldtype>CLOBTEXT</fieldtype>
+      <ismandatory>T</ismandatory>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_stl_start_date">
+      <label>Settlement Start Date</label>
+      <fieldtype>DATETIMETZ</fieldtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_stl_end_date">
+      <label>Settlement End Date</label>
+      <fieldtype>DATETIMETZ</fieldtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_stl_total_amount">
+      <label>Total Amount</label>
+      <fieldtype>CURRENCY</fieldtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_stl_currency">
+      <label>Currency</label>
+      <fieldtype>CLOBTEXT</fieldtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_stl_product_charges">
+      <label>Product Charges</label>
+      <fieldtype>CURRENCY</fieldtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_stl_shipping_credits">
+      <label>Shipping Credits</label>
+      <fieldtype>CURRENCY</fieldtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_stl_promo_rebates">
+      <label>Promotional Rebates</label>
+      <fieldtype>CURRENCY</fieldtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_stl_selling_fees">
+      <label>Selling Fees</label>
+      <fieldtype>CURRENCY</fieldtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_stl_fba_fees">
+      <label>FBA Fees</label>
+      <fieldtype>CURRENCY</fieldtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_stl_other_fees">
+      <label>Other Fees</label>
+      <fieldtype>CURRENCY</fieldtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_stl_refunds">
+      <label>Refunds</label>
+      <fieldtype>CURRENCY</fieldtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_stl_ns_deposit">
+      <label>NetSuite Deposit</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>-4</selectrecordtype>
+      <displaytype>NORMAL</displaytype>
+      <description>Linked NetSuite deposit/journal entry</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_stl_status">
+      <label>Processing Status</label>
+      <fieldtype>SELECT</fieldtype>
+      <ismandatory>T</ismandatory>
+      <displaytype>NORMAL</displaytype>
+      <selectoption scriptid="custrecord_amz_stl_status_1">
+        <value>Pending</value>
+      </selectoption>
+      <selectoption scriptid="custrecord_amz_stl_status_2">
+        <value>Processing</value>
+      </selectoption>
+      <selectoption scriptid="custrecord_amz_stl_status_3">
+        <value>Reconciled</value>
+      </selectoption>
+      <selectoption scriptid="custrecord_amz_stl_status_4">
+        <value>Error</value>
+      </selectoption>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_stl_config">
+      <label>Configuration</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>[scriptid=customrecord_amz_connector_config]</selectrecordtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+  </customrecordcustomfields>
+</customrecordtype>

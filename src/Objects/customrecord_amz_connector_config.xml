@@ -1,0 +1,168 @@
+<customrecordtype scriptid="customrecord_amz_connector_config">
+  <recordname>Amazon Connector Configuration</recordname>
+  <includename>F</includename>
+  <isinactive>F</isinactive>
+  <allowinlinemassupdate>F</allowinlinemassupdate>
+  <allowquickadd>F</allowquickadd>
+  <allowquicksearch>F</allowquicksearch>
+  <allowuiaccess>T</allowuiaccess>
+  <description>Stores Amazon SP-API credentials and connector settings for each Amazon marketplace.</description>
+  <enablenumbering>F</enablenumbering>
+  <numberingprefix>AMZCFG-</numberingprefix>
+  <enableoptimisticlocking>T</enableoptimisticlocking>
+  <enablesystemnotestream>T</enablesystemnotestream>
+  <iconbuiltin>T</iconbuiltin>
+  <iconindex>18</iconindex>
+  <customrecordcustomfields>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_marketplace">
+      <label>Marketplace</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>-104</selectrecordtype>
+      <ismandatory>T</ismandatory>
+      <displaytype>NORMAL</displaytype>
+      <description>Amazon Marketplace (e.g., US, CA, UK, DE)</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_seller_id">
+      <label>Amazon Seller ID</label>
+      <fieldtype>CLOBTEXT</fieldtype>
+      <ismandatory>T</ismandatory>
+      <displaytype>NORMAL</displaytype>
+      <description>Amazon Seller/Merchant ID</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_client_id">
+      <label>SP-API Client ID</label>
+      <fieldtype>CLOBTEXT</fieldtype>
+      <ismandatory>T</ismandatory>
+      <displaytype>NORMAL</displaytype>
+      <description>Amazon SP-API LWA Client ID</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_client_secret">
+      <label>SP-API Client Secret</label>
+      <fieldtype>CLOBTEXT</fieldtype>
+      <ismandatory>T</ismandatory>
+      <displaytype>NORMAL</displaytype>
+      <description>Amazon SP-API LWA Client Secret (encrypted at rest)</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_refresh_token">
+      <label>SP-API Refresh Token</label>
+      <fieldtype>CLOBTEXT</fieldtype>
+      <ismandatory>T</ismandatory>
+      <displaytype>NORMAL</displaytype>
+      <description>Amazon SP-API LWA Refresh Token (encrypted at rest)</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_endpoint">
+      <label>SP-API Endpoint</label>
+      <fieldtype>CLOBTEXT</fieldtype>
+      <ismandatory>T</ismandatory>
+      <displaytype>NORMAL</displaytype>
+      <description>Amazon SP-API regional endpoint URL</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_marketplace_id">
+      <label>Marketplace ID</label>
+      <fieldtype>CLOBTEXT</fieldtype>
+      <ismandatory>T</ismandatory>
+      <displaytype>NORMAL</displaytype>
+      <description>Amazon Marketplace ID (e.g., ATVPDKIKX0DER for US)</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_subsidiary">
+      <label>NetSuite Subsidiary</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>-117</selectrecordtype>
+      <ismandatory>F</ismandatory>
+      <displaytype>NORMAL</displaytype>
+      <description>NetSuite subsidiary to associate with this marketplace</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_location">
+      <label>Default Warehouse Location</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>-103</selectrecordtype>
+      <ismandatory>F</ismandatory>
+      <displaytype>NORMAL</displaytype>
+      <description>Default NetSuite inventory location for this marketplace</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_order_enabled">
+      <label>Order Sync Enabled</label>
+      <fieldtype>CHECKBOX</fieldtype>
+      <defaultvalue>T</defaultvalue>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_inv_enabled">
+      <label>Inventory Sync Enabled</label>
+      <fieldtype>CHECKBOX</fieldtype>
+      <defaultvalue>T</defaultvalue>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_fulfill_enabled">
+      <label>Fulfillment Sync Enabled</label>
+      <fieldtype>CHECKBOX</fieldtype>
+      <defaultvalue>T</defaultvalue>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_settle_enabled">
+      <label>Settlement Sync Enabled</label>
+      <fieldtype>CHECKBOX</fieldtype>
+      <defaultvalue>T</defaultvalue>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_return_enabled">
+      <label>Returns Sync Enabled</label>
+      <fieldtype>CHECKBOX</fieldtype>
+      <defaultvalue>T</defaultvalue>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_last_order_sync">
+      <label>Last Order Sync</label>
+      <fieldtype>DATETIMETZ</fieldtype>
+      <displaytype>DISABLED</displaytype>
+      <description>Timestamp of the last successful order sync</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_last_inv_sync">
+      <label>Last Inventory Sync</label>
+      <fieldtype>DATETIMETZ</fieldtype>
+      <displaytype>DISABLED</displaytype>
+      <description>Timestamp of the last successful inventory sync</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_last_settle_sync">
+      <label>Last Settlement Sync</label>
+      <fieldtype>DATETIMETZ</fieldtype>
+      <displaytype>DISABLED</displaytype>
+      <description>Timestamp of the last successful settlement sync</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_payment_method">
+      <label>Payment Method</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>-paymeth</selectrecordtype>
+      <ismandatory>F</ismandatory>
+      <displaytype>NORMAL</displaytype>
+      <description>Default payment method for Amazon orders</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_customer">
+      <label>Default Amazon Customer</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>-2</selectrecordtype>
+      <ismandatory>F</ismandatory>
+      <displaytype>NORMAL</displaytype>
+      <description>Generic customer record for Amazon marketplace orders</description>
+    </customrecordcustomfield>
+
+  </customrecordcustomfields>
+</customrecordtype>

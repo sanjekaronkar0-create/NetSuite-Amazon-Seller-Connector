@@ -1,0 +1,18 @@
+<usereventscript scriptid="customscript_amz_ue_fulfill">
+  <name>Amazon - Fulfillment Sync (UE)</name>
+  <scriptfile>[/SuiteScripts/AmazonConnector/userevent/ue_item_fulfillment.js]</scriptfile>
+  <description>Sends shipment confirmation to Amazon when Item Fulfillments are created in NetSuite.</description>
+  <isinactive>F</isinactive>
+  <notifyadmins>T</notifyadmins>
+  <notifyowner>T</notifyowner>
+  <scriptdeployments>
+    <scriptdeployment scriptid="customdeploy_amz_ue_fulfill">
+      <status>RELEASED</status>
+      <title>Amazon Fulfillment UE Deployment</title>
+      <isdeployed>T</isdeployed>
+      <loglevel>DEBUG</loglevel>
+      <recordtype>ITEM_FULFILLMENT</recordtype>
+      <aftersubmitfunction>afterSubmit</aftersubmitfunction>
+    </scriptdeployment>
+  </scriptdeployments>
+</usereventscript>

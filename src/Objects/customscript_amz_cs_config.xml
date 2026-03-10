@@ -1,0 +1,15 @@
+<clientscript scriptid="customscript_amz_cs_config">
+  <name>Amazon - Config Client Script</name>
+  <scriptfile>[/SuiteScripts/AmazonConnector/client/cs_config.js]</scriptfile>
+  <description>Client-side validation and UI interactions for the Amazon Connector dashboard and config records.</description>
+  <isinactive>F</isinactive>
+  <scriptdeployments>
+    <scriptdeployment scriptid="customdeploy_amz_cs_config">
+      <status>RELEASED</status>
+      <title>Amazon Config CS Deployment</title>
+      <isdeployed>T</isdeployed>
+      <loglevel>DEBUG</loglevel>
+      <recordtype>[scriptid=customrecord_amz_connector_config]</recordtype>
+    </scriptdeployment>
+  </scriptdeployments>
+</clientscript>

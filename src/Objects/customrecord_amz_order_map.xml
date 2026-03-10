@@ -1,0 +1,134 @@
+<customrecordtype scriptid="customrecord_amz_order_map">
+  <recordname>Amazon Order Mapping</recordname>
+  <includename>F</includename>
+  <isinactive>F</isinactive>
+  <allowinlinemassupdate>F</allowinlinemassupdate>
+  <allowquickadd>F</allowquickadd>
+  <allowquicksearch>T</allowquicksearch>
+  <allowuiaccess>T</allowuiaccess>
+  <description>Maps Amazon Order IDs to NetSuite Sales Order records for cross-reference and deduplication.</description>
+  <enablenumbering>F</enablenumbering>
+  <enableoptimisticlocking>T</enableoptimisticlocking>
+  <enablesystemnotestream>T</enablesystemnotestream>
+  <iconbuiltin>T</iconbuiltin>
+  <iconindex>10</iconindex>
+  <customrecordcustomfields>
+
+    <customrecordcustomfield scriptid="custrecord_amz_om_order_id">
+      <label>Amazon Order ID</label>
+      <fieldtype>CLOBTEXT</fieldtype>
+      <ismandatory>T</ismandatory>
+      <isformula>F</isformula>
+      <displaytype>NORMAL</displaytype>
+      <description>Amazon Marketplace Order ID (e.g., 111-1234567-1234567)</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_om_ns_sales_order">
+      <label>NetSuite Sales Order</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>-30</selectrecordtype>
+      <ismandatory>F</ismandatory>
+      <displaytype>NORMAL</displaytype>
+      <description>Linked NetSuite Sales Order internal ID</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_om_ns_cash_sale">
+      <label>NetSuite Cash Sale</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>-31</selectrecordtype>
+      <ismandatory>F</ismandatory>
+      <displaytype>NORMAL</displaytype>
+      <description>Linked NetSuite Cash Sale internal ID (if using cash sale flow)</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_om_status">
+      <label>Amazon Order Status</label>
+      <fieldtype>SELECT</fieldtype>
+      <ismandatory>T</ismandatory>
+      <displaytype>NORMAL</displaytype>
+      <selectoption scriptid="custrecord_amz_om_status_1">
+        <value>Pending</value>
+      </selectoption>
+      <selectoption scriptid="custrecord_amz_om_status_2">
+        <value>Unshipped</value>
+      </selectoption>
+      <selectoption scriptid="custrecord_amz_om_status_3">
+        <value>Shipped</value>
+      </selectoption>
+      <selectoption scriptid="custrecord_amz_om_status_4">
+        <value>Canceled</value>
+      </selectoption>
+      <selectoption scriptid="custrecord_amz_om_status_5">
+        <value>Returned</value>
+      </selectoption>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_om_purchase_date">
+      <label>Purchase Date</label>
+      <fieldtype>DATETIMETZ</fieldtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_om_total">
+      <label>Order Total</label>
+      <fieldtype>CURRENCY</fieldtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_om_currency">
+      <label>Currency</label>
+      <fieldtype>CLOBTEXT</fieldtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_om_buyer_email">
+      <label>Buyer Email</label>
+      <fieldtype>CLOBTEXT</fieldtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_om_ship_city">
+      <label>Ship City</label>
+      <fieldtype>CLOBTEXT</fieldtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_om_ship_state">
+      <label>Ship State</label>
+      <fieldtype>CLOBTEXT</fieldtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_om_ship_country">
+      <label>Ship Country</label>
+      <fieldtype>CLOBTEXT</fieldtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_om_fulfillment_channel">
+      <label>Fulfillment Channel</label>
+      <fieldtype>SELECT</fieldtype>
+      <displaytype>NORMAL</displaytype>
+      <selectoption scriptid="custrecord_amz_om_fc_1">
+        <value>MFN (Merchant Fulfilled)</value>
+      </selectoption>
+      <selectoption scriptid="custrecord_amz_om_fc_2">
+        <value>AFN (Amazon FBA)</value>
+      </selectoption>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_om_config">
+      <label>Configuration</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>[scriptid=customrecord_amz_connector_config]</selectrecordtype>
+      <displaytype>NORMAL</displaytype>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_om_last_synced">
+      <label>Last Synced</label>
+      <fieldtype>DATETIMETZ</fieldtype>
+      <displaytype>DISABLED</displaytype>
+    </customrecordcustomfield>
+
+  </customrecordcustomfields>
+</customrecordtype>

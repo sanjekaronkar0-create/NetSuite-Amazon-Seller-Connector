@@ -1,0 +1,21 @@
+<scheduledscript scriptid="customscript_amz_ss_settle_sync">
+  <name>Amazon - Settlement Sync (Scheduled)</name>
+  <scriptfile>[/SuiteScripts/AmazonConnector/scheduled/ss_settlement_sync.js]</scriptfile>
+  <description>Fetches Amazon settlement reports and creates financial records in NetSuite.</description>
+  <isinactive>F</isinactive>
+  <notifyadmins>T</notifyadmins>
+  <notifyowner>T</notifyowner>
+  <scriptdeployments>
+    <scriptdeployment scriptid="customdeploy_amz_ss_settle_sync">
+      <status>RELEASED</status>
+      <title>Amazon Settlement Sync Deployment</title>
+      <isdeployed>T</isdeployed>
+      <loglevel>DEBUG</loglevel>
+      <recurrence>
+        <single>
+          <repeat>EVERY_DAY</repeat>
+        </single>
+      </recurrence>
+    </scriptdeployment>
+  </scriptdeployments>
+</scheduledscript>
