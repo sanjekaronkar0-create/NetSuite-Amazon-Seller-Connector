@@ -99,20 +99,9 @@
     <customrecordcustomfield scriptid="custrecord_amz_stl_status">
       <label>Processing Status</label>
       <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>[scriptid=customlist_amz_settle_status]</selectrecordtype>
       <ismandatory>T</ismandatory>
       <displaytype>NORMAL</displaytype>
-      <selectoption scriptid="custrecord_amz_stl_status_1">
-        <value>Pending</value>
-      </selectoption>
-      <selectoption scriptid="custrecord_amz_stl_status_2">
-        <value>Processing</value>
-      </selectoption>
-      <selectoption scriptid="custrecord_amz_stl_status_3">
-        <value>Reconciled</value>
-      </selectoption>
-      <selectoption scriptid="custrecord_amz_stl_status_4">
-        <value>Error</value>
-      </selectoption>
     </customrecordcustomfield>
 
     <customrecordcustomfield scriptid="custrecord_amz_stl_config">

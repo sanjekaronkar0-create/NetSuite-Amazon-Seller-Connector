@@ -44,23 +44,9 @@
     <customrecordcustomfield scriptid="custrecord_amz_om_status">
       <label>Amazon Order Status</label>
       <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>[scriptid=customlist_amz_order_status]</selectrecordtype>
       <ismandatory>T</ismandatory>
       <displaytype>NORMAL</displaytype>
-      <selectoption scriptid="custrecord_amz_om_status_1">
-        <value>Pending</value>
-      </selectoption>
-      <selectoption scriptid="custrecord_amz_om_status_2">
-        <value>Unshipped</value>
-      </selectoption>
-      <selectoption scriptid="custrecord_amz_om_status_3">
-        <value>Shipped</value>
-      </selectoption>
-      <selectoption scriptid="custrecord_amz_om_status_4">
-        <value>Canceled</value>
-      </selectoption>
-      <selectoption scriptid="custrecord_amz_om_status_5">
-        <value>Returned</value>
-      </selectoption>
     </customrecordcustomfield>
 
     <customrecordcustomfield scriptid="custrecord_amz_om_purchase_date">
@@ -108,13 +94,8 @@
     <customrecordcustomfield scriptid="custrecord_amz_om_fulfillment_channel">
       <label>Fulfillment Channel</label>
       <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>[scriptid=customlist_amz_fulfill_channel]</selectrecordtype>
       <displaytype>NORMAL</displaytype>
-      <selectoption scriptid="custrecord_amz_om_fc_1">
-        <value>MFN (Merchant Fulfilled)</value>
-      </selectoption>
-      <selectoption scriptid="custrecord_amz_om_fc_2">
-        <value>AFN (Amazon FBA)</value>
-      </selectoption>
     </customrecordcustomfield>
 
     <customrecordcustomfield scriptid="custrecord_amz_om_config">
@@ -127,7 +108,7 @@
     <customrecordcustomfield scriptid="custrecord_amz_om_last_synced">
       <label>Last Synced</label>
       <fieldtype>DATETIMETZ</fieldtype>
-      <displaytype>DISABLED</displaytype>
+      <displaytype>INLINE</displaytype>
     </customrecordcustomfield>
 
   </customrecordcustomfields>

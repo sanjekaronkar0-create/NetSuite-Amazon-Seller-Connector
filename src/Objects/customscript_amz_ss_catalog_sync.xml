@@ -9,14 +9,6 @@
       <title>Amazon Catalog Sync Deployment</title>
       <isdeployed>T</isdeployed>
       <loglevel>DEBUG</loglevel>
-      <recurrence>
-        <single>
-          <repeat>
-            <frequency>HOURS</frequency>
-            <every>12</every>
-          </repeat>
-        </single>
-      </recurrence>
     </scriptdeployment>
   </scriptdeployments>
 </scheduledscript>

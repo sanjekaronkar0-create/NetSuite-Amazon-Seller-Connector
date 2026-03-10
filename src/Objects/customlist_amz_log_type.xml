@@ -1,0 +1,25 @@
+<customlist scriptid="customlist_amz_log_type">
+  <name>Amazon Log Type</name>
+  <isinactive>F</isinactive>
+  <isordered>T</isordered>
+  <customvalues>
+    <customvalue scriptid="custrecord_amz_log_type_1">
+      <value>Order Sync</value>
+    </customvalue>
+    <customvalue scriptid="custrecord_amz_log_type_2">
+      <value>Inventory Sync</value>
+    </customvalue>
+    <customvalue scriptid="custrecord_amz_log_type_3">
+      <value>Fulfillment Sync</value>
+    </customvalue>
+    <customvalue scriptid="custrecord_amz_log_type_4">
+      <value>Settlement Sync</value>
+    </customvalue>
+    <customvalue scriptid="custrecord_amz_log_type_5">
+      <value>Return Sync</value>
+    </customvalue>
+    <customvalue scriptid="custrecord_amz_log_type_6">
+      <value>API Call</value>
+    </customvalue>
+  </customvalues>
+</customlist>

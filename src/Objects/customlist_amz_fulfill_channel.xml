@@ -1,0 +1,13 @@
+<customlist scriptid="customlist_amz_fulfill_channel">
+  <name>Amazon Fulfillment Channel</name>
+  <isinactive>F</isinactive>
+  <isordered>T</isordered>
+  <customvalues>
+    <customvalue scriptid="custrecord_amz_om_fc_1">
+      <value>MFN (Merchant Fulfilled)</value>
+    </customvalue>
+    <customvalue scriptid="custrecord_amz_om_fc_2">
+      <value>AFN (Amazon FBA)</value>
+    </customvalue>
+  </customvalues>
+</customlist>
