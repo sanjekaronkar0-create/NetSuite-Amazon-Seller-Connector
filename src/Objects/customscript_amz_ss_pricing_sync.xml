@@ -5,7 +5,7 @@
   <isinactive>F</isinactive>
   <scriptdeployments>
     <scriptdeployment scriptid="customdeploy_amz_ss_pricing_sync">
-      <status>RELEASED</status>
+      <status>NOTSCHEDULED</status>
       <title>Amazon Pricing Sync Deployment</title>
       <isdeployed>T</isdeployed>
       <loglevel>DEBUG</loglevel>

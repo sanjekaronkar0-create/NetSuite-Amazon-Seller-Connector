@@ -3,12 +3,6 @@
   <scriptfile>[/SuiteScripts/AmazonConnector/mapreduce/mr_settlement_process.js]</scriptfile>
   <description>Creates Deposits and Journal Entries for Amazon settlement reconciliation</description>
   <isinactive>F</isinactive>
-  <scriptcustomfields>
-    <scriptcustomfield scriptid="custscript_amz_mr_settle_data">
-      <label>Settlement Data (JSON)</label>
-      <fieldtype>CLOBTEXT</fieldtype>
-    </scriptcustomfield>
-  </scriptcustomfields>
   <scriptdeployments>
     <scriptdeployment scriptid="customdeploy_amz_mr_settle_process">
       <status>RELEASED</status>

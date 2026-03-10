@@ -11,5 +11,17 @@
       <feature required="false">MULTICURRENCY</feature>
       <feature required="false">MULTILOCINVT</feature>
     </features>
+    <objects>
+      <object>customlist_amz_order_type</object>
+      <object>customlist_amz_log_type</object>
+      <object>customlist_amz_log_status</object>
+      <object>customlist_amz_order_status</object>
+      <object>customlist_amz_fulfill_channel</object>
+      <object>customlist_amz_settle_status</object>
+      <object>customlist_amz_return_status</object>
+      <object>customlist_amz_error_status</object>
+      <object>customrecord_amz_connector_config</object>
+      <object>customrecord_amz_order_map</object>
+    </objects>
   </dependencies>
 </manifest>

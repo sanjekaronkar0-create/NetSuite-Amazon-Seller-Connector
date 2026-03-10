@@ -5,13 +5,6 @@
   <isinactive>F</isinactive>
   <notifyadmins>T</notifyadmins>
   <notifyowner>T</notifyowner>
-  <scriptcustomfields>
-    <scriptcustomfield scriptid="custscript_amz_mr_order_data">
-      <label>Order Data JSON</label>
-      <fieldtype>CLOBTEXT</fieldtype>
-      <description>JSON payload containing config ID and Amazon orders to import.</description>
-    </scriptcustomfield>
-  </scriptcustomfields>
   <scriptdeployments>
     <scriptdeployment scriptid="customdeploy_amz_mr_order_import">
       <status>RELEASED</status>

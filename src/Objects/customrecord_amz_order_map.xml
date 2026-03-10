@@ -108,7 +108,7 @@
     <customrecordcustomfield scriptid="custrecord_amz_om_last_synced">
       <label>Last Synced</label>
       <fieldtype>DATETIMETZ</fieldtype>
-      <displaytype>INLINE</displaytype>
+      <displaytype>READONLY</displaytype>
     </customrecordcustomfield>
 
   </customrecordcustomfields>
