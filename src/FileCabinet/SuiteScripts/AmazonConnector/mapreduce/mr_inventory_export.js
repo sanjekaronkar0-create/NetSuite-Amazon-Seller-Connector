@@ -11,8 +11,9 @@ define([
     '../lib/constants',
     '../lib/configHelper',
     '../lib/logger',
+    '../lib/errorQueue',
     '../services/inventoryService'
-], function (runtime, log, constants, configHelper, logger, inventoryService) {
+], function (runtime, log, constants, configHelper, logger, errorQueue, inventoryService) {
 
     /**
      * Input stage: Get all item mappings for the config.
@@ -111,6 +112,13 @@ define([
                 'Reduce error for config ' + configId + ': ' + e.message, {
                 configId: configId,
                 details: e.stack
+            });
+
+            errorQueue.enqueue({
+                type: constants.ERROR_QUEUE_TYPE.INVENTORY_FEED,
+                errorMsg: e.message,
+                configId: configId,
+                maxRetries: 3
             });
         }
     }

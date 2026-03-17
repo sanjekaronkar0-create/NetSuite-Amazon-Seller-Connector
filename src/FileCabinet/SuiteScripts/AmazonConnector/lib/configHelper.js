@@ -107,7 +107,25 @@ define(['N/search', 'N/record', 'N/log', './constants'], function (search, recor
             maxRetries: parseInt(result.getValue(CR.FIELDS.MAX_RETRIES), 10) || 3,
             retryDelayMins: parseInt(result.getValue(CR.FIELDS.RETRY_DELAY_MINS), 10) || 30,
             // Multi-marketplace
-            additionalMarketplaceIds: result.getValue(CR.FIELDS.ADDITIONAL_MARKETPLACE_IDS)
+            additionalMarketplaceIds: result.getValue(CR.FIELDS.ADDITIONAL_MARKETPLACE_IDS),
+            // Notification Settings
+            notifyOnError: result.getValue(CR.FIELDS.NOTIFY_ON_ERROR),
+            notifyEmail: result.getValue(CR.FIELDS.NOTIFY_EMAIL),
+            notifyOnSync: result.getValue(CR.FIELDS.NOTIFY_ON_SYNC),
+            // Sync Interval Configuration
+            orderSyncInterval: parseInt(result.getValue(CR.FIELDS.ORDER_SYNC_INTERVAL), 10) || 15,
+            invSyncInterval: parseInt(result.getValue(CR.FIELDS.INV_SYNC_INTERVAL), 10) || 60,
+            settleSyncInterval: parseInt(result.getValue(CR.FIELDS.SETTLE_SYNC_INTERVAL), 10) || 1440,
+            returnSyncInterval: parseInt(result.getValue(CR.FIELDS.RETURN_SYNC_INTERVAL), 10) || 240,
+            pricingSyncInterval: parseInt(result.getValue(CR.FIELDS.PRICING_SYNC_INTERVAL), 10) || 1440,
+            catalogSyncInterval: parseInt(result.getValue(CR.FIELDS.CATALOG_SYNC_INTERVAL), 10) || 1440,
+            // Log Archival
+            logRetentionDays: parseInt(result.getValue(CR.FIELDS.LOG_RETENTION_DAYS), 10) || 90,
+            // FBA Inventory
+            fbaInvSyncEnabled: result.getValue(CR.FIELDS.FBA_INV_SYNC_ENABLED),
+            // Cancellation
+            cancelSyncEnabled: result.getValue(CR.FIELDS.CANCEL_SYNC_ENABLED),
+            cancelAction: result.getValue(CR.FIELDS.CANCEL_ACTION) || 'close'
         };
     }
 
@@ -163,7 +181,25 @@ define(['N/search', 'N/record', 'N/log', './constants'], function (search, recor
             taxCode: getValue(CR.FIELDS.TAX_CODE),
             maxRetries: parseInt(getValue(CR.FIELDS.MAX_RETRIES), 10) || 3,
             retryDelayMins: parseInt(getValue(CR.FIELDS.RETRY_DELAY_MINS), 10) || 30,
-            additionalMarketplaceIds: getValue(CR.FIELDS.ADDITIONAL_MARKETPLACE_IDS)
+            additionalMarketplaceIds: getValue(CR.FIELDS.ADDITIONAL_MARKETPLACE_IDS),
+            // Notification Settings
+            notifyOnError: getValue(CR.FIELDS.NOTIFY_ON_ERROR),
+            notifyEmail: getValue(CR.FIELDS.NOTIFY_EMAIL),
+            notifyOnSync: getValue(CR.FIELDS.NOTIFY_ON_SYNC),
+            // Sync Intervals
+            orderSyncInterval: parseInt(getValue(CR.FIELDS.ORDER_SYNC_INTERVAL), 10) || 15,
+            invSyncInterval: parseInt(getValue(CR.FIELDS.INV_SYNC_INTERVAL), 10) || 60,
+            settleSyncInterval: parseInt(getValue(CR.FIELDS.SETTLE_SYNC_INTERVAL), 10) || 1440,
+            returnSyncInterval: parseInt(getValue(CR.FIELDS.RETURN_SYNC_INTERVAL), 10) || 240,
+            pricingSyncInterval: parseInt(getValue(CR.FIELDS.PRICING_SYNC_INTERVAL), 10) || 1440,
+            catalogSyncInterval: parseInt(getValue(CR.FIELDS.CATALOG_SYNC_INTERVAL), 10) || 1440,
+            // Log Archival
+            logRetentionDays: parseInt(getValue(CR.FIELDS.LOG_RETENTION_DAYS), 10) || 90,
+            // FBA Inventory
+            fbaInvSyncEnabled: getValue(CR.FIELDS.FBA_INV_SYNC_ENABLED),
+            // Cancellation
+            cancelSyncEnabled: getValue(CR.FIELDS.CANCEL_SYNC_ENABLED),
+            cancelAction: getValue(CR.FIELDS.CANCEL_ACTION) || 'close'
         };
     }
 

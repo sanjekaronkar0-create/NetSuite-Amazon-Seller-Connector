@@ -541,3 +541,121 @@ Standard SuiteScript execution logs are available at:
 2. Review **SuiteScript Execution Logs** for script-level errors
 3. Check the **Error Queue** for failed operations and retry status
 4. Use the dashboard **Sync Controls** to manually trigger a sync for testing
+
+---
+
+## Advanced Features (v2.0)
+
+### Email Notifications
+
+Configure email alerts to be notified of sync failures, critical errors, and daily summaries.
+
+| Config Field | Description |
+|--|--|
+| **Notify on Error** | Enable email notifications when sync operations fail |
+| **Notification Email** | Comma-separated email addresses to receive alerts |
+| **Notify on Sync** | Enable sync completion summary notifications |
+
+Alert types:
+- **Error Notifications** - Sent when any sync operation fails
+- **Critical Alerts** - Sent when items permanently fail after max retries
+- **Daily Digest** - Summary of the last 24 hours of sync activity
+- **Sync Summaries** - Completion reports per sync type (optional)
+
+### FBA Inventory Tracking
+
+Pull Amazon FBA inventory levels into NetSuite for accurate multi-channel availability.
+
+| Config Field | Description |
+|--|--|
+| **FBA Inventory Sync Enabled** | Enable pulling FBA inventory from Amazon |
+| **FBA Location** | NetSuite location representing the FBA warehouse |
+
+The FBA inventory sync:
+1. Downloads FBA inventory report from Amazon
+2. Parses available, reserved, inbound, and unsellable quantities
+3. Updates item mapping records with current FBA quantities
+4. Optionally creates inventory adjustments at the FBA location
+
+### Order Cancellation Sync
+
+Automatically detect canceled Amazon orders and close corresponding NetSuite transactions.
+
+| Config Field | Description |
+|--|--|
+| **Cancel Sync Enabled** | Enable automatic cancellation processing |
+| **Cancel Action** | Action to take: `close` (close SO lines) |
+
+### Configurable Sync Intervals
+
+Control how frequently each sync type runs per marketplace.
+
+| Config Field | Default | Description |
+|--|--|--|
+| **Order Sync Interval** | 15 min | How often to poll for new orders |
+| **Inventory Sync Interval** | 60 min | How often to push inventory updates |
+| **Settlement Sync Interval** | 1440 min (daily) | How often to check for settlement reports |
+| **Return Sync Interval** | 240 min (4 hours) | How often to check for returns |
+| **Pricing Sync Interval** | 1440 min (daily) | How often to push price updates |
+| **Catalog Sync Interval** | 1440 min (daily) | How often to sync listings |
+
+### Data Archival & Cleanup
+
+Prevent record bloat by automatically archiving old integration logs and resolved error queue entries.
+
+| Config Field | Default | Description |
+|--|--|--|
+| **Log Retention Days** | 90 | Days to keep successful log records |
+
+Error/warning logs are retained for 2x the retention period. Failed error queue entries are archived after the retention period.
+
+### SP-API Rate Limiting
+
+Built-in rate limiting for Amazon SP-API endpoints to prevent 429 (Too Many Requests) errors.
+
+- Tracks request timing per API endpoint type
+- Automatically retries once on 429 responses
+- Configurable rate limits matching Amazon's documented limits
+
+### Feed Result Tracking
+
+Track the status and results of submitted Amazon feeds (inventory, pricing, fulfillment).
+
+- Polls feed status after submission
+- Parses feed processing results for errors
+- Logs successful/failed message counts
+- Enqueues failed feeds for retry
+
+### Currency Mapping
+
+Automatic currency detection per marketplace for accurate multi-currency pricing.
+
+Supported currencies: USD, CAD, MXN, BRL, GBP, EUR, SEK, PLN, TRY, AED, SAR, EGP, JPY, AUD, INR, SGD
+
+### Webhook API (v2.0)
+
+The RESTlet webhook now supports all sync types via TRIGGER_SYNC:
+
+```json
+POST /webhook
+{
+  "type": "TRIGGER_SYNC",
+  "syncType": "orders|inventory|settlements|returns|pricing|catalog|cancellations|fba_inventory|errors|archival"
+}
+```
+
+GET endpoint returns connector health, version, available sync types, and feature list.
+
+### Complete Sync Configuration Matrix
+
+| Data Type | Direction | Configurable | Item-Level | Schedule | Notes |
+|--|--|--|--|--|--|
+| **Orders** | Amazon -> NetSuite | Yes | N/A | Configurable | Supports SO or Cash Sale |
+| **Inventory** | NetSuite -> Amazon | Yes | Yes (per item) | Configurable | Only syncs on qty change |
+| **Pricing** | NetSuite -> Amazon | Yes | Yes (per item) | Configurable | Supports sale prices |
+| **Fulfillment** | NetSuite -> Amazon | Yes | N/A | Real-time | MFN only, skips FBA |
+| **Returns** | Amazon -> NetSuite | Yes | N/A | Configurable | Auto RMA + Credit Memo |
+| **Settlements** | Amazon -> NetSuite | Yes | N/A | Configurable | Auto Deposit + JE |
+| **Catalog** | Amazon -> NetSuite | Yes | N/A | Configurable | Auto item mapping |
+| **Cancellations** | Amazon -> NetSuite | Yes | N/A | Configurable | Auto-close SO |
+| **FBA Inventory** | Amazon -> NetSuite | Yes | N/A | Configurable | Updates FBA location |

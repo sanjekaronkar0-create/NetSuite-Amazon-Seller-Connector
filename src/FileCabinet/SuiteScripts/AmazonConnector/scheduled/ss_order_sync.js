@@ -12,8 +12,9 @@ define([
     '../lib/constants',
     '../lib/configHelper',
     '../lib/logger',
-    '../services/orderService'
-], function (task, runtime, log, constants, configHelper, logger, orderService) {
+    '../services/orderService',
+    '../services/notificationService'
+], function (task, runtime, log, constants, configHelper, logger, orderService, notificationService) {
 
     const CR = constants.CUSTOM_RECORDS.CONFIG;
 
@@ -104,6 +105,8 @@ define([
                 configId: config.configId,
                 details: e.stack
             });
+            notificationService.sendErrorNotification(config,
+                'Order Sync Failed', 'Error: ' + e.message);
         }
     }
 
