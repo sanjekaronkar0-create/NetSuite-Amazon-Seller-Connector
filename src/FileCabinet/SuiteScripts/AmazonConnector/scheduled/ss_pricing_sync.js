@@ -12,8 +12,9 @@ define([
     '../lib/configHelper',
     '../lib/logger',
     '../services/pricingService',
+    '../services/feedTrackingService',
     '../services/notificationService'
-], function (runtime, log, constants, configHelper, logger, pricingService, notificationService) {
+], function (runtime, log, constants, configHelper, logger, pricingService, feedTrackingService, notificationService) {
 
     function execute(context) {
         logger.progress(constants.LOG_TYPE.PRICING_SYNC, 'Pricing sync started');
@@ -86,7 +87,12 @@ define([
 
         // Build and submit feed
         const feedXml = pricingService.buildPricingFeedXml(config.sellerId, pricingData);
-        pricingService.submitPricingFeed(config, feedXml);
+        var feedResult = pricingService.submitPricingFeed(config, feedXml);
+
+        // Track feed completion
+        if (feedResult && feedResult.feedId) {
+            feedTrackingService.trackFeedCompletion(config, feedResult.feedId, 'Pricing');
+        }
 
         // Update item mappings with new prices
         for (const item of pricingData) {

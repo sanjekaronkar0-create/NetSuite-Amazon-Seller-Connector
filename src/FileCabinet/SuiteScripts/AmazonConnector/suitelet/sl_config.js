@@ -46,6 +46,7 @@ define([
         form.addButton({ id: 'custpage_btn_retry_errors', label: 'Retry Errors', functionName: 'triggerSync("errors")' });
         form.addButton({ id: 'custpage_btn_sync_cancel', label: 'Sync Cancellations', functionName: 'triggerSync("cancellations")' });
         form.addButton({ id: 'custpage_btn_sync_fba_inv', label: 'Sync FBA Inventory', functionName: 'triggerSync("fba_inventory")' });
+        form.addButton({ id: 'custpage_btn_product_export', label: 'Export Products', functionName: 'triggerSync("product_export")' });
         form.addButton({ id: 'custpage_btn_data_archival', label: 'Run Data Archival', functionName: 'triggerSync("archival")' });
         form.addButton({ id: 'custpage_btn_test_conn', label: 'Test Connection', functionName: 'testConnection()' });
 
@@ -291,7 +292,8 @@ define([
                 errors: { s: constants.SCRIPT_IDS.SCHED_ERROR_RETRY, d: constants.DEPLOY_IDS.SCHED_ERROR_RETRY },
                 cancellations: { s: constants.SCRIPT_IDS.SCHED_CANCEL_SYNC, d: constants.DEPLOY_IDS.SCHED_CANCEL_SYNC },
                 fba_inventory: { s: constants.SCRIPT_IDS.SCHED_FBA_INV_SYNC, d: constants.DEPLOY_IDS.SCHED_FBA_INV_SYNC },
-                archival: { s: constants.SCRIPT_IDS.SCHED_DATA_ARCHIVAL, d: constants.DEPLOY_IDS.SCHED_DATA_ARCHIVAL }
+                archival: { s: constants.SCRIPT_IDS.SCHED_DATA_ARCHIVAL, d: constants.DEPLOY_IDS.SCHED_DATA_ARCHIVAL },
+                product_export: { s: constants.SCRIPT_IDS.SCHED_PRODUCT_EXPORT, d: constants.DEPLOY_IDS.SCHED_PRODUCT_EXPORT }
             };
             if (action === 'test_connection') {
                 var configId = context.request.parameters.custpage_config_id;

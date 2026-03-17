@@ -14,8 +14,9 @@ define([
     'N/log',
     '../lib/constants',
     '../lib/configHelper',
-    '../lib/logger'
-], function (search, record, runtime, log, constants, configHelper, logger) {
+    '../lib/logger',
+    '../services/notificationService'
+], function (search, record, runtime, log, constants, configHelper, logger, notificationService) {
 
     var CR = constants.CUSTOM_RECORDS;
 
@@ -51,6 +52,10 @@ define([
         } catch (e) {
             logger.error(constants.LOG_TYPE.DATA_ARCHIVAL,
                 'Data archival failed: ' + e.message, { details: e.stack });
+            if (configs && configs.length > 0) {
+                notificationService.sendErrorNotification(configs[0],
+                    'Data Archival Failed', 'Error: ' + e.message);
+            }
         }
     }
 

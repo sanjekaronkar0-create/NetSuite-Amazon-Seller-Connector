@@ -1,0 +1,14 @@
+<scheduledscript scriptid="customscript_amz_ss_product_export">
+  <name>Amazon - Product Feed Export</name>
+  <scriptfile>[/SuiteScripts/AmazonConnector/scheduled/ss_product_export.js]</scriptfile>
+  <description>Exports product data from NetSuite to Amazon via Product Data feeds</description>
+  <isinactive>F</isinactive>
+  <scriptdeployments>
+    <scriptdeployment scriptid="customdeploy_amz_ss_product_export">
+      <status>NOTSCHEDULED</status>
+      <title>Amazon Product Export Deployment</title>
+      <isdeployed>T</isdeployed>
+      <loglevel>DEBUG</loglevel>
+    </scriptdeployment>
+  </scriptdeployments>
+</scheduledscript>

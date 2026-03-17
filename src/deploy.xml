@@ -39,6 +39,7 @@
         <path>~/Objects/customscript_amz_ss_data_archival.xml</path>
         <path>~/Objects/customscript_amz_ss_fba_inv_sync.xml</path>
         <path>~/Objects/customscript_amz_ss_cancel_sync.xml</path>
+        <path>~/Objects/customscript_amz_ss_product_export.xml</path>
     </objects>
     <translationimports>
         <path>~/Translations/*</path>

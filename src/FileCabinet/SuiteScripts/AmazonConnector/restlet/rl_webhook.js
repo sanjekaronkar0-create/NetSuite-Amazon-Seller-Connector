@@ -20,7 +20,7 @@ define([
         return {
             status: 'active',
             connector: 'Amazon Seller Connector',
-            version: '2.0.0',
+            version: '2.1.0',
             timestamp: new Date().toISOString(),
             endpoints: {
                 GET: 'Health check / status',
@@ -30,7 +30,7 @@ define([
             syncTypes: [
                 'orders', 'inventory', 'settlements', 'returns',
                 'pricing', 'catalog', 'cancellations', 'fba_inventory',
-                'errors', 'archival'
+                'errors', 'archival', 'product_export'
             ],
             features: [
                 'Multi-marketplace support',
@@ -43,6 +43,10 @@ define([
                 'Order cancellation sync',
                 'Data archival/cleanup',
                 'Feed result tracking',
+                'Product feed export to Amazon',
+                'Customer resolution chain',
+                'Connection testing',
+                'Order status sync back to NetSuite',
                 'SP-API rate limiting'
             ]
         };
@@ -173,7 +177,8 @@ define([
             cancellations: { scriptId: constants.SCRIPT_IDS.SCHED_CANCEL_SYNC, deployId: constants.DEPLOY_IDS.SCHED_CANCEL_SYNC },
             fba_inventory: { scriptId: constants.SCRIPT_IDS.SCHED_FBA_INV_SYNC, deployId: constants.DEPLOY_IDS.SCHED_FBA_INV_SYNC },
             errors: { scriptId: constants.SCRIPT_IDS.SCHED_ERROR_RETRY, deployId: constants.DEPLOY_IDS.SCHED_ERROR_RETRY },
-            archival: { scriptId: constants.SCRIPT_IDS.SCHED_DATA_ARCHIVAL, deployId: constants.DEPLOY_IDS.SCHED_DATA_ARCHIVAL }
+            archival: { scriptId: constants.SCRIPT_IDS.SCHED_DATA_ARCHIVAL, deployId: constants.DEPLOY_IDS.SCHED_DATA_ARCHIVAL },
+            product_export: { scriptId: constants.SCRIPT_IDS.SCHED_PRODUCT_EXPORT, deployId: constants.DEPLOY_IDS.SCHED_PRODUCT_EXPORT }
         };
 
         const scriptInfo = scriptMap[syncType];
