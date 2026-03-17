@@ -15,12 +15,34 @@ define(['N/search', 'N/record', 'N/log', './constants'], function (search, recor
      */
     function getAllConfigs() {
         const configs = [];
+        // Subsidiary (SELECT → -117) is not searchable in non-OneWorld accounts,
+        // so exclude it from search columns and fetch it via lookupFields instead.
+        const unsearchableColumns = [CR.FIELDS.SUBSIDIARY];
+        const searchColumns = Object.values(CR.FIELDS).filter(function (f) {
+            return unsearchableColumns.indexOf(f) === -1;
+        });
         search.create({
             type: CR.ID,
             filters: [['isinactive', 'is', 'F']],
-            columns: Object.values(CR.FIELDS)
+            columns: searchColumns
         }).run().each(function (result) {
-            configs.push(mapResultToConfig(result));
+            const cfg = mapResultToConfig(result);
+            try {
+                var looked = search.lookupFields({
+                    type: CR.ID,
+                    id: result.id,
+                    columns: unsearchableColumns
+                });
+                cfg.subsidiary = looked[CR.FIELDS.SUBSIDIARY]
+                    ? (looked[CR.FIELDS.SUBSIDIARY][0]
+                        ? looked[CR.FIELDS.SUBSIDIARY][0].value
+                        : looked[CR.FIELDS.SUBSIDIARY])
+                    : null;
+            } catch (e) {
+                log.debug({ title: 'getAllConfigs', details: 'Could not look up subsidiary for config ' + result.id + ': ' + e.message });
+                cfg.subsidiary = null;
+            }
+            configs.push(cfg);
             return true;
         });
 
@@ -62,7 +84,7 @@ define(['N/search', 'N/record', 'N/log', './constants'], function (search, recor
             endpoint: result.getValue(CR.FIELDS.ENDPOINT),
             marketplaceId: result.getValue(CR.FIELDS.MARKETPLACE_ID),
             // NetSuite Mapping
-            subsidiary: result.getValue(CR.FIELDS.SUBSIDIARY),
+            subsidiary: (function () { try { return result.getValue(CR.FIELDS.SUBSIDIARY); } catch (e) { return null; } })(),
             location: result.getValue(CR.FIELDS.LOCATION),
             customer: result.getValue(CR.FIELDS.CUSTOMER),
             paymentMethod: result.getValue(CR.FIELDS.PAYMENT_METHOD),
