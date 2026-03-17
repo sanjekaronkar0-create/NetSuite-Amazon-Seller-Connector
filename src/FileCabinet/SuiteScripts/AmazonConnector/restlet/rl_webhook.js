@@ -20,13 +20,35 @@ define([
         return {
             status: 'active',
             connector: 'Amazon Seller Connector',
-            version: '1.0.0',
+            version: '2.1.0',
             timestamp: new Date().toISOString(),
             endpoints: {
                 GET: 'Health check / status',
-                POST: 'Process Amazon notification',
+                POST: 'Process Amazon notification (ORDER_STATUS_CHANGE, RETURN_CREATED, TRIGGER_SYNC)',
                 PUT: 'Update order status'
-            }
+            },
+            syncTypes: [
+                'orders', 'inventory', 'settlements', 'returns',
+                'pricing', 'catalog', 'cancellations', 'fba_inventory',
+                'errors', 'archival', 'product_export'
+            ],
+            features: [
+                'Multi-marketplace support',
+                'Configurable sync toggles per data type',
+                'Item-level inventory/price sync control',
+                'FBA and MFN order routing',
+                'Automatic error retry with exponential backoff',
+                'Email notifications for sync failures',
+                'FBA inventory tracking',
+                'Order cancellation sync',
+                'Data archival/cleanup',
+                'Feed result tracking',
+                'Product feed export to Amazon',
+                'Customer resolution chain',
+                'Connection testing',
+                'Order status sync back to NetSuite',
+                'SP-API rate limiting'
+            ]
         };
     }
 
@@ -140,6 +162,8 @@ define([
 
     /**
      * Handles manual sync trigger requests from external systems.
+     * Supports all sync types: orders, inventory, settlements, returns,
+     * pricing, catalog, cancellations, fba_inventory, errors, archival.
      */
     function handleManualTrigger(data) {
         const syncType = data.syncType;
@@ -147,12 +171,22 @@ define([
             orders: { scriptId: constants.SCRIPT_IDS.SCHED_ORDER_SYNC, deployId: constants.DEPLOY_IDS.SCHED_ORDER_SYNC },
             inventory: { scriptId: constants.SCRIPT_IDS.SCHED_INV_SYNC, deployId: constants.DEPLOY_IDS.SCHED_INV_SYNC },
             settlements: { scriptId: constants.SCRIPT_IDS.SCHED_SETTLE_SYNC, deployId: constants.DEPLOY_IDS.SCHED_SETTLE_SYNC },
-            returns: { scriptId: constants.SCRIPT_IDS.SCHED_RETURN_SYNC, deployId: constants.DEPLOY_IDS.SCHED_RETURN_SYNC }
+            returns: { scriptId: constants.SCRIPT_IDS.SCHED_RETURN_SYNC, deployId: constants.DEPLOY_IDS.SCHED_RETURN_SYNC },
+            pricing: { scriptId: constants.SCRIPT_IDS.SCHED_PRICING_SYNC, deployId: constants.DEPLOY_IDS.SCHED_PRICING_SYNC },
+            catalog: { scriptId: constants.SCRIPT_IDS.SCHED_CATALOG_SYNC, deployId: constants.DEPLOY_IDS.SCHED_CATALOG_SYNC },
+            cancellations: { scriptId: constants.SCRIPT_IDS.SCHED_CANCEL_SYNC, deployId: constants.DEPLOY_IDS.SCHED_CANCEL_SYNC },
+            fba_inventory: { scriptId: constants.SCRIPT_IDS.SCHED_FBA_INV_SYNC, deployId: constants.DEPLOY_IDS.SCHED_FBA_INV_SYNC },
+            errors: { scriptId: constants.SCRIPT_IDS.SCHED_ERROR_RETRY, deployId: constants.DEPLOY_IDS.SCHED_ERROR_RETRY },
+            archival: { scriptId: constants.SCRIPT_IDS.SCHED_DATA_ARCHIVAL, deployId: constants.DEPLOY_IDS.SCHED_DATA_ARCHIVAL },
+            product_export: { scriptId: constants.SCRIPT_IDS.SCHED_PRODUCT_EXPORT, deployId: constants.DEPLOY_IDS.SCHED_PRODUCT_EXPORT }
         };
 
         const scriptInfo = scriptMap[syncType];
         if (!scriptInfo) {
-            return { success: false, message: 'Invalid syncType. Use: orders, inventory, settlements, returns' };
+            return {
+                success: false,
+                message: 'Invalid syncType. Available: ' + Object.keys(scriptMap).join(', ')
+            };
         }
 
         const scriptTask = task.create({

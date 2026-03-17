@@ -115,6 +115,18 @@ define([
             xml += '        <ShipperTrackingNumber>' +
                 escapeXml(trackingInfo.trackingNumbers[0]) + '</ShipperTrackingNumber>\n';
             xml += '      </FulfillmentData>\n';
+
+            // Send additional tracking numbers as separate FulfillmentData blocks
+            for (var i = 1; i < trackingInfo.trackingNumbers.length; i++) {
+                var pkg = trackingInfo.packages[i] || {};
+                var pkgCarrier = pkg.carrier ? mapCarrier(pkg.carrier) : trackingInfo.carrier;
+                xml += '      <FulfillmentData>\n';
+                xml += '        <CarrierName>' + escapeXml(pkgCarrier) + '</CarrierName>\n';
+                xml += '        <ShippingMethod>Standard</ShippingMethod>\n';
+                xml += '        <ShipperTrackingNumber>' +
+                    escapeXml(trackingInfo.trackingNumbers[i]) + '</ShipperTrackingNumber>\n';
+                xml += '      </FulfillmentData>\n';
+            }
         }
 
         xml += '    </OrderFulfillment>\n';

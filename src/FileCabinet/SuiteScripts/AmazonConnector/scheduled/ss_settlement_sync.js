@@ -11,8 +11,9 @@ define([
     '../lib/constants',
     '../lib/configHelper',
     '../lib/logger',
-    '../services/settlementService'
-], function (task, runtime, log, constants, configHelper, logger, settlementService) {
+    '../services/settlementService',
+    '../services/notificationService'
+], function (task, runtime, log, constants, configHelper, logger, settlementService, notificationService) {
 
     const CR = constants.CUSTOM_RECORDS.CONFIG;
 
@@ -32,19 +33,45 @@ define([
 
                     const reports = settlementService.fetchSettlementReports(config, lastSync);
 
+                    // Filter to unprocessed, ready reports
+                    var readyReports = [];
+                    for (var r = 0; r < reports.length; r++) {
+                        if (reports[r].processingStatus === 'DONE' &&
+                            !settlementService.isSettlementProcessed(reports[r].reportId)) {
+                            readyReports.push(reports[r]);
+                        }
+                    }
+
+                    if (readyReports.length === 0) {
+                        log.debug({ title: 'Settlement Sync', details: 'No new settlement reports for config ' + config.configId });
+                        configHelper.updateLastSync(config.configId, CR.FIELDS.LAST_SETTLE_SYNC);
+                        continue;
+                    }
+
                     log.audit({
                         title: 'Settlement Sync',
-                        details: 'Found ' + reports.length + ' reports for config ' + config.configId
+                        details: 'Found ' + readyReports.length + ' reports. Triggering Map/Reduce processing.'
                     });
 
-                    for (const report of reports) {
-                        if (runtime.getCurrentScript().getRemainingUsage() < 500) {
-                            logger.warn(constants.LOG_TYPE.SETTLEMENT_SYNC, 'Low governance, stopping');
-                            return;
+                    // Delegate bulk processing to Map/Reduce
+                    var mrTask = task.create({
+                        taskType: task.TaskType.MAP_REDUCE,
+                        scriptId: constants.SCRIPT_IDS.MR_SETTLE_PROCESS,
+                        deploymentId: constants.DEPLOY_IDS.MR_SETTLE_PROCESS,
+                        params: {
+                            custscript_amz_mr_settle_data: JSON.stringify({
+                                configId: config.configId,
+                                reports: readyReports
+                            })
                         }
+                    });
 
-                        processSettlementReport(config, report);
-                    }
+                    var taskId = mrTask.submit();
+                    logger.success(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                        'Settlement Map/Reduce triggered. Task ID: ' + taskId, {
+                        configId: config.configId,
+                        details: 'Reports: ' + readyReports.length
+                    });
 
                     configHelper.updateLastSync(config.configId, CR.FIELDS.LAST_SETTLE_SYNC);
 
@@ -54,6 +81,8 @@ define([
                         configId: config.configId,
                         details: e.stack
                     });
+                    notificationService.sendErrorNotification(config,
+                        'Settlement Sync Failed', 'Error: ' + e.message);
                 }
             }
 
@@ -61,51 +90,6 @@ define([
         } catch (e) {
             logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
                 'Settlement sync failed: ' + e.message, { details: e.stack });
-        }
-    }
-
-    /**
-     * Processes a single settlement report.
-     */
-    function processSettlementReport(config, report) {
-        const reportId = report.reportId;
-
-        if (settlementService.isSettlementProcessed(reportId)) {
-            log.debug({ title: 'Settlement Sync', details: 'Report already processed: ' + reportId });
-            return;
-        }
-
-        try {
-            // Check report is done
-            if (report.processingStatus !== 'DONE') {
-                log.debug({ title: 'Settlement Sync', details: 'Report not ready: ' + reportId });
-                return;
-            }
-
-            // Download and parse
-            const data = settlementService.downloadSettlementReport(config, report.reportDocumentId);
-
-            // Create settlement record
-            const settlementId = settlementService.createSettlementRecord(config, report, data.summary);
-
-            // Mark as reconciled
-            settlementService.updateSettlementStatus(settlementId, constants.SETTLEMENT_STATUS.RECONCILED);
-
-            logger.success(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                'Settlement report processed: ' + reportId, {
-                configId: config.configId,
-                recordType: 'customrecord_amz_settlement',
-                recordId: settlementId,
-                amazonRef: reportId
-            });
-
-        } catch (e) {
-            logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                'Error processing settlement report ' + reportId + ': ' + e.message, {
-                configId: config.configId,
-                amazonRef: reportId,
-                details: e.stack
-            });
         }
     }
 

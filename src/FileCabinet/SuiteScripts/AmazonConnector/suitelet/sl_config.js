@@ -16,8 +16,9 @@ define([
     'N/log',
     '../lib/constants',
     '../lib/configHelper',
-    '../lib/logger'
-], function (serverWidget, search, task, url, runtime, redirect, log, constants, configHelper, logger) {
+    '../lib/logger',
+    '../services/connectionTestService'
+], function (serverWidget, search, task, url, runtime, redirect, log, constants, configHelper, logger, connectionTestService) {
 
     const CR = constants.CUSTOM_RECORDS;
 
@@ -43,6 +44,11 @@ define([
         form.addButton({ id: 'custpage_btn_sync_pricing', label: 'Sync Pricing', functionName: 'triggerSync("pricing")' });
         form.addButton({ id: 'custpage_btn_sync_catalog', label: 'Sync Catalog', functionName: 'triggerSync("catalog")' });
         form.addButton({ id: 'custpage_btn_retry_errors', label: 'Retry Errors', functionName: 'triggerSync("errors")' });
+        form.addButton({ id: 'custpage_btn_sync_cancel', label: 'Sync Cancellations', functionName: 'triggerSync("cancellations")' });
+        form.addButton({ id: 'custpage_btn_sync_fba_inv', label: 'Sync FBA Inventory', functionName: 'triggerSync("fba_inventory")' });
+        form.addButton({ id: 'custpage_btn_product_export', label: 'Export Products', functionName: 'triggerSync("product_export")' });
+        form.addButton({ id: 'custpage_btn_data_archival', label: 'Run Data Archival', functionName: 'triggerSync("archival")' });
+        form.addButton({ id: 'custpage_btn_test_conn', label: 'Test Connection', functionName: 'testConnection()' });
 
         form.clientScriptModulePath = '../client/cs_config.js';
 
@@ -53,6 +59,13 @@ define([
             label: 'Action'
         });
         actionField.updateDisplayType({ displayType: serverWidget.FieldDisplayType.HIDDEN });
+
+        var configIdField = form.addField({
+            id: 'custpage_config_id',
+            type: serverWidget.FieldType.TEXT,
+            label: 'Config ID'
+        });
+        configIdField.updateDisplayType({ displayType: serverWidget.FieldDisplayType.HIDDEN });
 
         // -- Configurations Tab --
         const configTab = form.addTab({ id: 'custpage_tab_configs', label: 'Marketplace Configurations' });
@@ -73,8 +86,17 @@ define([
         configSublist.addField({ id: 'custpage_cfg_fulfillment', type: serverWidget.FieldType.TEXT, label: 'Fulfillment' });
         configSublist.addField({ id: 'custpage_cfg_settlements', type: serverWidget.FieldType.TEXT, label: 'Settlements' });
         configSublist.addField({ id: 'custpage_cfg_returns', type: serverWidget.FieldType.TEXT, label: 'Returns' });
+        configSublist.addField({ id: 'custpage_cfg_pricing', type: serverWidget.FieldType.TEXT, label: 'Pricing' });
+        configSublist.addField({ id: 'custpage_cfg_catalog', type: serverWidget.FieldType.TEXT, label: 'Catalog' });
+        configSublist.addField({ id: 'custpage_cfg_cancel', type: serverWidget.FieldType.TEXT, label: 'Cancellations' });
+        configSublist.addField({ id: 'custpage_cfg_fba_inv', type: serverWidget.FieldType.TEXT, label: 'FBA Inventory' });
+        configSublist.addField({ id: 'custpage_cfg_notify', type: serverWidget.FieldType.TEXT, label: 'Notifications' });
         configSublist.addField({ id: 'custpage_cfg_last_order', type: serverWidget.FieldType.TEXT, label: 'Last Order Sync' });
         configSublist.addField({ id: 'custpage_cfg_last_inv', type: serverWidget.FieldType.TEXT, label: 'Last Inv Sync' });
+        configSublist.addField({ id: 'custpage_cfg_last_settle', type: serverWidget.FieldType.TEXT, label: 'Last Settle Sync' });
+        configSublist.addField({ id: 'custpage_cfg_last_return', type: serverWidget.FieldType.TEXT, label: 'Last Return Sync' });
+        configSublist.addField({ id: 'custpage_cfg_last_pricing', type: serverWidget.FieldType.TEXT, label: 'Last Pricing Sync' });
+        configSublist.addField({ id: 'custpage_cfg_last_catalog', type: serverWidget.FieldType.TEXT, label: 'Last Catalog Sync' });
 
         populateConfigs(configSublist);
 
@@ -165,8 +187,17 @@ define([
             sublist.setSublistValue({ id: 'custpage_cfg_fulfillment', line: idx, value: config.fulfillEnabled ? 'Enabled' : 'Disabled' });
             sublist.setSublistValue({ id: 'custpage_cfg_settlements', line: idx, value: config.settleEnabled ? 'Enabled' : 'Disabled' });
             sublist.setSublistValue({ id: 'custpage_cfg_returns', line: idx, value: config.returnEnabled ? 'Enabled' : 'Disabled' });
+            sublist.setSublistValue({ id: 'custpage_cfg_pricing', line: idx, value: config.pricingEnabled ? 'Enabled' : 'Disabled' });
+            sublist.setSublistValue({ id: 'custpage_cfg_catalog', line: idx, value: config.catalogEnabled ? 'Enabled' : 'Disabled' });
+            sublist.setSublistValue({ id: 'custpage_cfg_cancel', line: idx, value: config.cancelSyncEnabled ? 'Enabled' : 'Disabled' });
+            sublist.setSublistValue({ id: 'custpage_cfg_fba_inv', line: idx, value: config.fbaInvSyncEnabled ? 'Enabled' : 'Disabled' });
+            sublist.setSublistValue({ id: 'custpage_cfg_notify', line: idx, value: config.notifyOnError ? 'Enabled' : 'Disabled' });
             sublist.setSublistValue({ id: 'custpage_cfg_last_order', line: idx, value: config.lastOrderSync || 'Never' });
             sublist.setSublistValue({ id: 'custpage_cfg_last_inv', line: idx, value: config.lastInvSync || 'Never' });
+            sublist.setSublistValue({ id: 'custpage_cfg_last_settle', line: idx, value: config.lastSettleSync || 'Never' });
+            sublist.setSublistValue({ id: 'custpage_cfg_last_return', line: idx, value: config.lastReturnSync || 'Never' });
+            sublist.setSublistValue({ id: 'custpage_cfg_last_pricing', line: idx, value: config.lastPricingSync || 'Never' });
+            sublist.setSublistValue({ id: 'custpage_cfg_last_catalog', line: idx, value: config.lastCatalogSync || 'Never' });
         });
     }
 
@@ -258,8 +289,27 @@ define([
                 returns: { s: constants.SCRIPT_IDS.SCHED_RETURN_SYNC, d: constants.DEPLOY_IDS.SCHED_RETURN_SYNC },
                 pricing: { s: constants.SCRIPT_IDS.SCHED_PRICING_SYNC, d: constants.DEPLOY_IDS.SCHED_PRICING_SYNC },
                 catalog: { s: constants.SCRIPT_IDS.SCHED_CATALOG_SYNC, d: constants.DEPLOY_IDS.SCHED_CATALOG_SYNC },
-                errors: { s: constants.SCRIPT_IDS.SCHED_ERROR_RETRY, d: constants.DEPLOY_IDS.SCHED_ERROR_RETRY }
+                errors: { s: constants.SCRIPT_IDS.SCHED_ERROR_RETRY, d: constants.DEPLOY_IDS.SCHED_ERROR_RETRY },
+                cancellations: { s: constants.SCRIPT_IDS.SCHED_CANCEL_SYNC, d: constants.DEPLOY_IDS.SCHED_CANCEL_SYNC },
+                fba_inventory: { s: constants.SCRIPT_IDS.SCHED_FBA_INV_SYNC, d: constants.DEPLOY_IDS.SCHED_FBA_INV_SYNC },
+                archival: { s: constants.SCRIPT_IDS.SCHED_DATA_ARCHIVAL, d: constants.DEPLOY_IDS.SCHED_DATA_ARCHIVAL },
+                product_export: { s: constants.SCRIPT_IDS.SCHED_PRODUCT_EXPORT, d: constants.DEPLOY_IDS.SCHED_PRODUCT_EXPORT }
             };
+            if (action === 'test_connection') {
+                var configId = context.request.parameters.custpage_config_id;
+                if (configId) {
+                    var config = configHelper.getConfig(configId);
+                    var testResults = connectionTestService.testConnection(config);
+                    var statusMsg = testResults.success ? 'Connection test PASSED' : 'Connection test FAILED';
+                    for (var s = 0; s < testResults.steps.length; s++) {
+                        statusMsg += '\n' + testResults.steps[s].step + ': ' +
+                            (testResults.steps[s].success ? 'OK' : 'FAILED') +
+                            ' - ' + testResults.steps[s].message;
+                    }
+                    logger.success(constants.LOG_TYPE.API_CALL, statusMsg, { configId: configId });
+                }
+            }
+
             const syncInfo = syncMap[action];
             if (syncInfo) {
                 triggerScheduledScript(syncInfo.s, syncInfo.d);

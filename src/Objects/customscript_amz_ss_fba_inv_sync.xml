@@ -1,0 +1,14 @@
+<scheduledscript scriptid="customscript_amz_ss_fba_inv_sync">
+  <name>Amazon - FBA Inventory Sync</name>
+  <scriptfile>[/SuiteScripts/AmazonConnector/scheduled/ss_fba_inv_sync.js]</scriptfile>
+  <description>Downloads FBA inventory levels from Amazon and updates NetSuite item records at the configured FBA location</description>
+  <isinactive>F</isinactive>
+  <scriptdeployments>
+    <scriptdeployment scriptid="customdeploy_amz_ss_fba_inv_sync">
+      <status>NOTSCHEDULED</status>
+      <title>Amazon FBA Inventory Sync Deployment</title>
+      <isdeployed>T</isdeployed>
+      <loglevel>DEBUG</loglevel>
+    </scriptdeployment>
+  </scriptdeployments>
+</scheduledscript>

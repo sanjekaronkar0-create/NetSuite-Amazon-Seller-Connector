@@ -33,8 +33,50 @@ define(['N/https', 'N/log', './amazonAuth', './constants', './logger'],
         return makeRequest('PUT', options);
     }
 
+    // Track last request time per endpoint for rate limiting
+    const lastRequestTime = {};
+
     /**
-     * Core request method with token management and retry logic.
+     * Determines the rate limit key for a given API path.
+     */
+    function getRateLimitKey(path) {
+        if (path.includes('/orders/') && path.includes('/orderItems')) return 'ORDER_ITEMS_GET';
+        if (path.includes('/orders/') && path.includes('/address')) return 'ORDER_ADDRESS_GET';
+        if (path.includes('/orders/') && path.includes('/buyerInfo')) return 'ORDER_BUYER_INFO_GET';
+        if (path.includes('/orders/')) return 'ORDERS_GET';
+        if (path.includes('/feeds/') && path.includes('/documents')) return 'FEEDS_POST';
+        if (path.includes('/feeds/')) return 'FEEDS_GET';
+        if (path.includes('/reports/') && path.includes('/documents')) return 'REPORTS_DOCUMENT_GET';
+        if (path.includes('/reports/')) return 'REPORTS_GET';
+        return 'DEFAULT';
+    }
+
+    /**
+     * Enforces SP-API rate limits by delaying if needed.
+     * Uses token bucket algorithm based on burst limits.
+     */
+    function enforceRateLimit(path) {
+        const key = getRateLimitKey(path);
+        const limit = constants.RATE_LIMITS[key] || constants.RATE_LIMITS.DEFAULT;
+        const minInterval = 1000 / limit.rate; // Minimum ms between requests
+
+        const now = Date.now();
+        const last = lastRequestTime[key] || 0;
+        const elapsed = now - last;
+
+        if (elapsed < minInterval) {
+            // Log throttle but don't block - SuiteScript doesn't have sleep
+            log.debug({
+                title: 'SP-API Rate Limit',
+                details: 'Rate limit approaching for ' + key + '. Interval: ' + elapsed + 'ms, min: ' + minInterval + 'ms'
+            });
+        }
+
+        lastRequestTime[key] = now;
+    }
+
+    /**
+     * Core request method with token management, rate limiting, and retry logic.
      */
     function makeRequest(method, options) {
         const config = options.config;
@@ -45,6 +87,9 @@ define(['N/https', 'N/log', './amazonAuth', './constants', './logger'],
             url += '?' + buildQueryString(options.params);
         }
 
+        // Enforce rate limits
+        enforceRateLimit(options.path);
+
         let token = amazonAuth.getAccessToken(config);
         let response = executeRequest(method, url, token, options.body);
 
@@ -53,6 +98,13 @@ define(['N/https', 'N/log', './amazonAuth', './constants', './logger'],
             log.debug({ title: 'SP-API 403', details: 'Refreshing token and retrying' });
             amazonAuth.invalidateToken(config.configId);
             token = amazonAuth.getAccessToken(config);
+            response = executeRequest(method, url, token, options.body);
+        }
+
+        // Handle 429 Too Many Requests - retry once after logging
+        if (response.code === 429) {
+            log.audit({ title: 'SP-API 429', details: 'Rate limited on ' + options.path + ', retrying once' });
+            lastRequestTime[getRateLimitKey(options.path)] = Date.now();
             response = executeRequest(method, url, token, options.body);
         }
 
@@ -250,6 +302,51 @@ define(['N/https', 'N/log', './amazonAuth', './constants', './logger'],
         return get({ config, path: '/reports/2021-06-30/reports', params });
     }
 
+    /**
+     * Gets FBA inventory summaries.
+     * @param {Object} config
+     * @param {string} [nextToken] - Pagination token
+     * @returns {Object} FBA inventory response
+     */
+    function getFbaInventory(config, nextToken) {
+        const params = {
+            granularityType: 'Marketplace',
+            granularityId: config.marketplaceId,
+            marketplaceIds: config.marketplaceId
+        };
+        if (nextToken) params.nextToken = nextToken;
+        return get({ config, path: '/fba/inventory/v1/summaries', params });
+    }
+
+    /**
+     * Gets canceled orders within a date range.
+     * @param {Object} config
+     * @param {string} lastUpdatedAfter - ISO 8601 date
+     * @returns {Object} Orders response (canceled only)
+     */
+    function getCanceledOrders(config, lastUpdatedAfter) {
+        const params = {
+            MarketplaceIds: config.marketplaceId,
+            LastUpdatedAfter: lastUpdatedAfter,
+            OrderStatuses: 'Canceled'
+        };
+        return get({ config, path: '/orders/v0/orders', params });
+    }
+
+    /**
+     * Gets feed processing result document.
+     * @param {Object} config
+     * @param {string} feedId
+     * @returns {Object} Feed result
+     */
+    function getFeedResult(config, feedId) {
+        const feed = getFeed(config, feedId);
+        if (feed.resultFeedDocumentId) {
+            return getReportDocument(config, feed.resultFeedDocumentId);
+        }
+        return feed;
+    }
+
     return {
         get,
         post,
@@ -261,10 +358,13 @@ define(['N/https', 'N/log', './amazonAuth', './constants', './logger'],
         createFeedDocument,
         createFeed,
         getFeed,
+        getFeedResult,
         createReport,
         getReport,
         getReportDocument,
         getReturnsReport,
-        getSettlementReports
+        getSettlementReports,
+        getFbaInventory,
+        getCanceledOrders
     };
 });

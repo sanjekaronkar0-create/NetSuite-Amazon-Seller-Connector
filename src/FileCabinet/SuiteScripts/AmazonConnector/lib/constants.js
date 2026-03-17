@@ -66,7 +66,25 @@ define([], function () {
                 CASH_SALE_FORM: 'custrecord_amz_cfg_cs_form',
                 // Tax Handling
                 TAX_ITEM: 'custrecord_amz_cfg_tax_item',
-                TAX_CODE: 'custrecord_amz_cfg_tax_code'
+                TAX_CODE: 'custrecord_amz_cfg_tax_code',
+                // Notification Settings
+                NOTIFY_ON_ERROR: 'custrecord_amz_cfg_notify_error',
+                NOTIFY_EMAIL: 'custrecord_amz_cfg_notify_email',
+                NOTIFY_ON_SYNC: 'custrecord_amz_cfg_notify_sync',
+                // Sync Interval Configuration (minutes)
+                ORDER_SYNC_INTERVAL: 'custrecord_amz_cfg_order_interval',
+                INV_SYNC_INTERVAL: 'custrecord_amz_cfg_inv_interval',
+                SETTLE_SYNC_INTERVAL: 'custrecord_amz_cfg_settle_interval',
+                RETURN_SYNC_INTERVAL: 'custrecord_amz_cfg_return_interval',
+                PRICING_SYNC_INTERVAL: 'custrecord_amz_cfg_pricing_interval',
+                CATALOG_SYNC_INTERVAL: 'custrecord_amz_cfg_catalog_interval',
+                // Log Archival
+                LOG_RETENTION_DAYS: 'custrecord_amz_cfg_log_retention',
+                // FBA Inventory Sync
+                FBA_INV_SYNC_ENABLED: 'custrecord_amz_cfg_fba_inv_sync',
+                // Order Cancellation
+                CANCEL_SYNC_ENABLED: 'custrecord_amz_cfg_cancel_enabled',
+                CANCEL_ACTION: 'custrecord_amz_cfg_cancel_action'
             }
         },
         LOG: {
@@ -194,7 +212,12 @@ define([], function () {
         PRICING_SYNC: '7',
         CATALOG_SYNC: '8',
         ERROR_RETRY: '9',
-        FINANCIAL_RECON: '10'
+        FINANCIAL_RECON: '10',
+        NOTIFICATION: '11',
+        FBA_INVENTORY: '12',
+        CANCELLATION: '13',
+        DATA_ARCHIVAL: '14',
+        FEED_TRACKING: '15'
     };
 
     const LOG_STATUS = {
@@ -254,7 +277,10 @@ define([], function () {
         SETTLEMENT_PROCESS: 'SETTLEMENT_PROCESS',
         CREDIT_MEMO_CREATE: 'CREDIT_MEMO_CREATE',
         DEPOSIT_CREATE: 'DEPOSIT_CREATE',
-        PRICING_UPDATE: 'PRICING_UPDATE'
+        PRICING_UPDATE: 'PRICING_UPDATE',
+        CANCEL_PROCESS: 'CANCEL_PROCESS',
+        FBA_INVENTORY: 'FBA_INVENTORY',
+        CATALOG_SYNC: 'CATALOG_SYNC'
     };
 
     // ============================================================
@@ -318,6 +344,65 @@ define([], function () {
         ORDER_REPORT: 'GET_FLAT_FILE_ALL_ORDERS_DATA_BY_ORDER_DATE_GENERAL'
     };
 
+    // ============================================================
+    // SP-API Rate Limits (requests per second)
+    // ============================================================
+
+    const RATE_LIMITS = {
+        ORDERS_GET: { rate: 0.0167, burst: 20 },         // 1 req/min sustained, 20 burst
+        ORDER_ITEMS_GET: { rate: 0.5, burst: 30 },
+        ORDER_ADDRESS_GET: { rate: 0.5, burst: 30 },
+        ORDER_BUYER_INFO_GET: { rate: 0.5, burst: 30 },
+        FEEDS_POST: { rate: 2, burst: 15 },
+        FEEDS_GET: { rate: 2, burst: 15 },
+        REPORTS_POST: { rate: 0.0222, burst: 15 },
+        REPORTS_GET: { rate: 2, burst: 15 },
+        REPORTS_DOCUMENT_GET: { rate: 0.0167, burst: 15 },
+        DEFAULT: { rate: 1, burst: 5 }
+    };
+
+    // ============================================================
+    // Marketplace-to-Currency Mapping
+    // ============================================================
+
+    const MARKETPLACE_CURRENCY = {
+        'ATVPDKIKX0DER': 'USD',    // US
+        'A2EUQ1WTGCTBG2': 'CAD',   // Canada
+        'A1AM78C64UM0Y8': 'MXN',   // Mexico
+        'A2Q3Y263D00KWC': 'BRL',   // Brazil
+        'A1F83G8C2ARO7P': 'GBP',   // UK
+        'A1PA6795UKMFR9': 'EUR',   // Germany
+        'A13V1IB3VIYZZH': 'EUR',   // France
+        'APJ6JRA9NG5V4': 'EUR',    // Italy
+        'A1RKKUPIHCS9HS': 'EUR',   // Spain
+        'A1805IZSGTT6HS': 'EUR',   // Netherlands
+        'A2NODRKZP88ZB9': 'SEK',   // Sweden
+        'A1C3SOZAPQ2R3W': 'PLN',   // Poland
+        'A33AVAJ2PDY3EV': 'TRY',   // Turkey
+        'A2VIGQ35RCS4UG': 'AED',   // UAE
+        'A17E79C6D8DWNP': 'SAR',   // Saudi Arabia
+        'ARBP9OOSHTCHU': 'EGP',    // Egypt
+        'A1VC38T7YXB528': 'JPY',   // Japan
+        'A39IBJ37TRP1C6': 'AUD',   // Australia
+        'A21TJRUUN4KGV': 'INR',    // India
+        'A19VAU5U5O7RUS': 'SGD'    // Singapore
+    };
+
+    // ============================================================
+    // Sync Interval Defaults (minutes)
+    // ============================================================
+
+    const SYNC_INTERVAL_DEFAULTS = {
+        ORDER: 15,
+        INVENTORY: 60,
+        FULFILLMENT: 0,  // Real-time via User Event
+        SETTLEMENT: 1440, // Daily
+        RETURN: 240,      // 4 hours
+        PRICING: 1440,    // Daily
+        CATALOG: 1440,    // Daily
+        ERROR_RETRY: 30
+    };
+
     const CARRIER_MAP = {
         'ups': 'UPS',
         'fedex': 'FedEx',
@@ -350,6 +435,10 @@ define([], function () {
         SCHED_PRICING_SYNC: 'customscript_amz_ss_pricing_sync',
         SCHED_CATALOG_SYNC: 'customscript_amz_ss_catalog_sync',
         SCHED_ERROR_RETRY: 'customscript_amz_ss_error_retry',
+        SCHED_DATA_ARCHIVAL: 'customscript_amz_ss_data_archival',
+        SCHED_FBA_INV_SYNC: 'customscript_amz_ss_fba_inv_sync',
+        SCHED_CANCEL_SYNC: 'customscript_amz_ss_cancel_sync',
+        SCHED_PRODUCT_EXPORT: 'customscript_amz_ss_product_export',
         MR_ORDER_IMPORT: 'customscript_amz_mr_order_import',
         MR_INV_EXPORT: 'customscript_amz_mr_inv_export',
         MR_SETTLE_PROCESS: 'customscript_amz_mr_settle_process',
@@ -368,6 +457,10 @@ define([], function () {
         SCHED_PRICING_SYNC: 'customdeploy_amz_ss_pricing_sync',
         SCHED_CATALOG_SYNC: 'customdeploy_amz_ss_catalog_sync',
         SCHED_ERROR_RETRY: 'customdeploy_amz_ss_error_retry',
+        SCHED_DATA_ARCHIVAL: 'customdeploy_amz_ss_data_archival',
+        SCHED_FBA_INV_SYNC: 'customdeploy_amz_ss_fba_inv_sync',
+        SCHED_CANCEL_SYNC: 'customdeploy_amz_ss_cancel_sync',
+        SCHED_PRODUCT_EXPORT: 'customdeploy_amz_ss_product_export',
         MR_ORDER_IMPORT: 'customdeploy_amz_mr_order_import',
         MR_INV_EXPORT: 'customdeploy_amz_mr_inv_export',
         MR_SETTLE_PROCESS: 'customdeploy_amz_mr_settle_process',
@@ -392,6 +485,9 @@ define([], function () {
         SP_API_ENDPOINTS,
         LWA_TOKEN_URL,
         MARKETPLACE_IDS,
+        MARKETPLACE_CURRENCY,
+        RATE_LIMITS,
+        SYNC_INTERVAL_DEFAULTS,
         FEED_TYPES,
         REPORT_TYPES,
         CARRIER_MAP,

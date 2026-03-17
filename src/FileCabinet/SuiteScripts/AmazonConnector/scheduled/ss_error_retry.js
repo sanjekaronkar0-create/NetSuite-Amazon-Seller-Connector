@@ -16,9 +16,10 @@ define([
     '../services/returnService',
     '../services/financialService',
     '../services/fulfillmentService',
-    '../services/pricingService'
+    '../services/pricingService',
+    '../services/notificationService'
 ], function (runtime, log, constants, configHelper, errorQueue, logger,
-    orderService, returnService, financialService, fulfillmentService, pricingService) {
+    orderService, returnService, financialService, fulfillmentService, pricingService, notificationService) {
 
     function execute(context) {
         logger.progress(constants.LOG_TYPE.ERROR_RETRY, 'Error retry processing started');
@@ -71,6 +72,9 @@ define([
             logger.success(constants.LOG_TYPE.ERROR_RETRY,
                 'Error retry completed: ' + processed + ' processed, ' +
                 resolved + ' resolved, ' + failed + ' failed');
+
+            // Send critical alert for items that permanently failed
+            sendCriticalAlerts();
 
         } catch (e) {
             logger.error(constants.LOG_TYPE.ERROR_RETRY,
@@ -159,6 +163,58 @@ define([
         if (!config || !payload.feedContent) return false;
         pricingService.submitPricingFeed(config, payload.feedContent);
         return true;
+    }
+
+    /**
+     * Sends email alerts for items that permanently failed (exceeded max retries).
+     */
+    function sendCriticalAlerts() {
+        try {
+            var EQ = constants.CUSTOM_RECORDS.ERROR_QUEUE;
+            var failedByConfig = {};
+
+            // Find recently failed items (failed in the last hour)
+            var oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+            var N_search = require('N/search');
+
+            N_search.create({
+                type: EQ.ID,
+                filters: [
+                    [EQ.FIELDS.STATUS, 'anyof', [constants.ERROR_QUEUE_STATUS.FAILED]],
+                    'AND',
+                    ['lastmodified', 'onorafter', oneHourAgo]
+                ],
+                columns: [
+                    EQ.FIELDS.TYPE,
+                    EQ.FIELDS.AMAZON_REF,
+                    EQ.FIELDS.ERROR_MSG,
+                    EQ.FIELDS.RETRY_COUNT,
+                    EQ.FIELDS.CONFIG
+                ]
+            }).run().each(function (result) {
+                var configId = result.getValue(EQ.FIELDS.CONFIG) || 'unknown';
+                if (!failedByConfig[configId]) failedByConfig[configId] = [];
+                failedByConfig[configId].push({
+                    type: result.getValue(EQ.FIELDS.TYPE),
+                    amazonRef: result.getValue(EQ.FIELDS.AMAZON_REF),
+                    errorMsg: result.getValue(EQ.FIELDS.ERROR_MSG),
+                    retryCount: result.getValue(EQ.FIELDS.RETRY_COUNT)
+                });
+                return true;
+            });
+
+            for (var configId in failedByConfig) {
+                if (configId === 'unknown') continue;
+                try {
+                    var config = configHelper.getConfig(configId);
+                    notificationService.sendCriticalAlert(config, failedByConfig[configId]);
+                } catch (e) {
+                    log.debug({ title: 'Critical Alert', details: e.message });
+                }
+            }
+        } catch (e) {
+            log.debug({ title: 'sendCriticalAlerts', details: e.message });
+        }
     }
 
     return { execute };

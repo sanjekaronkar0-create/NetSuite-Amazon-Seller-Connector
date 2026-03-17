@@ -12,8 +12,9 @@ define([
     '../lib/configHelper',
     '../lib/amazonClient',
     '../lib/logger',
+    '../lib/errorQueue',
     '../services/orderService'
-], function (runtime, log, constants, configHelper, amazonClient, logger, orderService) {
+], function (runtime, log, constants, configHelper, amazonClient, logger, errorQueue, orderService) {
 
     /**
      * Input stage: Returns the order data passed from the scheduled script.
@@ -137,6 +138,16 @@ define([
                 'Failed to create SO for Amazon order ' + amazonOrderId + ': ' + e.message, {
                 amazonRef: amazonOrderId,
                 details: e.stack
+            });
+
+            // Enqueue for retry
+            errorQueue.enqueue({
+                type: constants.ERROR_QUEUE_TYPE.ORDER_CREATE,
+                amazonRef: amazonOrderId,
+                errorMsg: e.message,
+                payload: context.values[0],
+                configId: data.configId,
+                maxRetries: 3
             });
         }
     }

@@ -14,8 +14,9 @@ define([
     '../lib/configHelper',
     '../lib/amazonClient',
     '../lib/logger',
-    '../services/returnService'
-], function (task, runtime, https, log, constants, configHelper, amazonClient, logger, returnService) {
+    '../services/returnService',
+    '../services/notificationService'
+], function (task, runtime, https, log, constants, configHelper, amazonClient, logger, returnService, notificationService) {
 
     function execute(context) {
         logger.progress(constants.LOG_TYPE.RETURN_SYNC, 'Return sync started');
@@ -34,6 +35,8 @@ define([
                         configId: config.configId,
                         details: e.stack
                     });
+                    notificationService.sendErrorNotification(config,
+                        'Return Sync Failed', 'Error: ' + e.message);
                 }
             }
 
@@ -93,19 +96,35 @@ define([
         const fileResponse = https.get({ url: docResponse.url });
         const returnRows = parseReturnReport(fileResponse.body);
 
+        if (returnRows.length === 0) {
+            log.debug({ title: 'Return Sync', details: 'No return entries found' });
+            return;
+        }
+
         log.audit({
             title: 'Return Sync',
-            details: 'Processing ' + returnRows.length + ' return entries'
+            details: 'Found ' + returnRows.length + ' return entries. Triggering Map/Reduce processing.'
         });
 
-        for (const returnData of returnRows) {
-            if (runtime.getCurrentScript().getRemainingUsage() < 300) {
-                logger.warn(constants.LOG_TYPE.RETURN_SYNC, 'Low governance, stopping');
-                return;
+        // Delegate bulk return processing to Map/Reduce
+        var mrTask = task.create({
+            taskType: task.TaskType.MAP_REDUCE,
+            scriptId: constants.SCRIPT_IDS.MR_RETURN_PROCESS,
+            deploymentId: constants.DEPLOY_IDS.MR_RETURN_PROCESS,
+            params: {
+                custscript_amz_mr_return_data: JSON.stringify({
+                    configId: config.configId,
+                    returns: returnRows
+                })
             }
+        });
 
-            processReturnEntry(config, returnData);
-        }
+        var taskId = mrTask.submit();
+        logger.success(constants.LOG_TYPE.RETURN_SYNC,
+            'Return Map/Reduce triggered. Task ID: ' + taskId, {
+            configId: config.configId,
+            details: 'Return entries: ' + returnRows.length
+        });
     }
 
     /**
@@ -137,62 +156,6 @@ define([
         }
 
         return returns;
-    }
-
-    /**
-     * Processes a single return entry.
-     */
-    function processReturnEntry(config, returnData) {
-        if (!returnData.amazonOrderId) return;
-
-        // Check if already processed
-        if (returnService.isReturnProcessed(returnData.amazonOrderId, returnData.returnId)) {
-            return;
-        }
-
-        // Find linked sales order
-        const orderLink = returnService.getLinkedSalesOrder(returnData.amazonOrderId);
-        if (!orderLink || !orderLink.salesOrderId) {
-            logger.warn(constants.LOG_TYPE.RETURN_SYNC,
-                'No linked SO for return on order ' + returnData.amazonOrderId, {
-                configId: config.configId,
-                amazonRef: returnData.amazonOrderId
-            });
-            return;
-        }
-
-        try {
-            // Build return data with SKU info
-            returnData.returnedSkus = [{
-                sku: returnData.sku,
-                quantity: returnData.quantity
-            }];
-
-            // Create RMA
-            const rmaId = returnService.createReturnAuthorization(
-                config, returnData, orderLink.salesOrderId
-            );
-
-            // Create mapping record
-            returnService.createReturnMapRecord(
-                config, returnData, rmaId, orderLink.orderMapId
-            );
-
-            logger.success(constants.LOG_TYPE.RETURN_SYNC,
-                'Return processed for order ' + returnData.amazonOrderId, {
-                configId: config.configId,
-                recordType: 'returnauthorization',
-                recordId: rmaId,
-                amazonRef: returnData.amazonOrderId
-            });
-        } catch (e) {
-            logger.error(constants.LOG_TYPE.RETURN_SYNC,
-                'Error processing return for ' + returnData.amazonOrderId + ': ' + e.message, {
-                configId: config.configId,
-                amazonRef: returnData.amazonOrderId,
-                details: e.stack
-            });
-        }
     }
 
     return { execute };
