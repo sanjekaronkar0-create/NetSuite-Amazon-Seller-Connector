@@ -7,7 +7,7 @@
   <notifyowner>T</notifyowner>
   <scriptdeployments>
     <scriptdeployment scriptid="customdeploy_amz_mr_inv_export">
-      <status>RELEASED</status>
+      <status>NOTSCHEDULED</status>
       <title>Amazon Inventory Export Deployment</title>
       <isdeployed>T</isdeployed>
       <loglevel>DEBUG</loglevel>

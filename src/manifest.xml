@@ -38,10 +38,6 @@
       <object>customscript_amz_ss_pricing_sync</object>
       <object>customscript_amz_ss_catalog_sync</object>
       <object>customscript_amz_ss_error_retry</object>
-      <object>customscript_amz_ss_data_archival</object>
-      <object>customscript_amz_ss_fba_inv_sync</object>
-      <object>customscript_amz_ss_cancel_sync</object>
-      <object>customscript_amz_ss_product_export</object>
       <object>customscript_amz_sl_config</object>
       <object>customscript_amz_cs_config</object>
       <object>customscript_amz_ue_fulfill</object>

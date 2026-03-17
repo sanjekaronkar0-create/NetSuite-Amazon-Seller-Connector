@@ -128,21 +128,21 @@
     <customrecordcustomfield scriptid="custrecord_amz_cfg_last_order_sync">
       <label>Last Order Sync</label>
       <fieldtype>DATETIMETZ</fieldtype>
-      <displaytype>READONLY</displaytype>
+      <displaytype>NORMAL</displaytype>
       <description>Timestamp of the last successful order sync</description>
     </customrecordcustomfield>
 
     <customrecordcustomfield scriptid="custrecord_amz_cfg_last_inv_sync">
       <label>Last Inventory Sync</label>
       <fieldtype>DATETIMETZ</fieldtype>
-      <displaytype>READONLY</displaytype>
+      <displaytype>NORMAL</displaytype>
       <description>Timestamp of the last successful inventory sync</description>
     </customrecordcustomfield>
 
     <customrecordcustomfield scriptid="custrecord_amz_cfg_last_settle_sync">
       <label>Last Settlement Sync</label>
       <fieldtype>DATETIMETZ</fieldtype>
-      <displaytype>READONLY</displaytype>
+      <displaytype>NORMAL</displaytype>
       <description>Timestamp of the last successful settlement sync</description>
     </customrecordcustomfield>
 
@@ -184,19 +184,19 @@
     <customrecordcustomfield scriptid="custrecord_amz_cfg_last_return_sync">
       <label>Last Return Sync</label>
       <fieldtype>DATETIMETZ</fieldtype>
-      <displaytype>READONLY</displaytype>
+      <displaytype>NORMAL</displaytype>
     </customrecordcustomfield>
 
     <customrecordcustomfield scriptid="custrecord_amz_cfg_last_pricing_sync">
       <label>Last Pricing Sync</label>
       <fieldtype>DATETIMETZ</fieldtype>
-      <displaytype>READONLY</displaytype>
+      <displaytype>NORMAL</displaytype>
     </customrecordcustomfield>
 
     <customrecordcustomfield scriptid="custrecord_amz_cfg_last_catalog_sync">
       <label>Last Catalog Sync</label>
       <fieldtype>DATETIMETZ</fieldtype>
-      <displaytype>READONLY</displaytype>
+      <displaytype>NORMAL</displaytype>
     </customrecordcustomfield>
 
     <!-- Order Configuration -->

@@ -5,7 +5,7 @@
   <isinactive>F</isinactive>
   <scriptdeployments>
     <scriptdeployment scriptid="customdeploy_amz_mr_settle_process">
-      <status>RELEASED</status>
+      <status>NOTSCHEDULED</status>
       <title>Amazon Settlement M/R Deployment</title>
       <isdeployed>T</isdeployed>
       <loglevel>DEBUG</loglevel>

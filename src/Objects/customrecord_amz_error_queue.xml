@@ -86,7 +86,7 @@
     <customrecordcustomfield scriptid="custrecord_amz_eq_created">
       <label>Created</label>
       <fieldtype>DATETIMETZ</fieldtype>
-      <displaytype>READONLY</displaytype>
+      <displaytype>NORMAL</displaytype>
     </customrecordcustomfield>
 
   </customrecordcustomfields>

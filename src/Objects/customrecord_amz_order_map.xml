@@ -108,13 +108,13 @@
     <customrecordcustomfield scriptid="custrecord_amz_om_last_synced">
       <label>Last Synced</label>
       <fieldtype>DATETIMETZ</fieldtype>
-      <displaytype>READONLY</displaytype>
+      <displaytype>NORMAL</displaytype>
     </customrecordcustomfield>
 
     <customrecordcustomfield scriptid="custrecord_amz_om_ns_invoice">
       <label>NetSuite Invoice</label>
       <fieldtype>SELECT</fieldtype>
-      <selectrecordtype>-33</selectrecordtype>
+      <selectrecordtype>-31</selectrecordtype>
       <ismandatory>F</ismandatory>
       <displaytype>NORMAL</displaytype>
       <description>Linked NetSuite Invoice (if auto-invoiced)</description>

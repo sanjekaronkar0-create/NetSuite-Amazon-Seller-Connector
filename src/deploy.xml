@@ -6,40 +6,7 @@
         <path>~/FileCabinet/SuiteScripts/AmazonConnector/*</path>
     </files>
     <objects>
-        <path>~/Objects/customlist_amz_order_type.xml</path>
-        <path>~/Objects/customlist_amz_log_type.xml</path>
-        <path>~/Objects/customlist_amz_log_status.xml</path>
-        <path>~/Objects/customlist_amz_order_status.xml</path>
-        <path>~/Objects/customlist_amz_fulfill_channel.xml</path>
-        <path>~/Objects/customlist_amz_settle_status.xml</path>
-        <path>~/Objects/customlist_amz_return_status.xml</path>
-        <path>~/Objects/customlist_amz_error_status.xml</path>
-        <path>~/Objects/customrecord_amz_connector_config.xml</path>
-        <path>~/Objects/customrecord_amz_integration_log.xml</path>
-        <path>~/Objects/customrecord_amz_order_map.xml</path>
-        <path>~/Objects/customrecord_amz_item_map.xml</path>
-        <path>~/Objects/customrecord_amz_settlement.xml</path>
-        <path>~/Objects/customrecord_amz_return_map.xml</path>
-        <path>~/Objects/customscript_amz_ss_order_sync.xml</path>
-        <path>~/Objects/customscript_amz_mr_order_import.xml</path>
-        <path>~/Objects/customscript_amz_ss_inv_sync.xml</path>
-        <path>~/Objects/customscript_amz_mr_inv_export.xml</path>
-        <path>~/Objects/customscript_amz_ss_settle_sync.xml</path>
-        <path>~/Objects/customscript_amz_ss_return_sync.xml</path>
-        <path>~/Objects/customscript_amz_sl_config.xml</path>
-        <path>~/Objects/customscript_amz_ue_fulfill.xml</path>
-        <path>~/Objects/customscript_amz_rl_webhook.xml</path>
-        <path>~/Objects/customscript_amz_cs_config.xml</path>
-        <path>~/Objects/customrecord_amz_error_queue.xml</path>
-        <path>~/Objects/customscript_amz_ss_pricing_sync.xml</path>
-        <path>~/Objects/customscript_amz_ss_catalog_sync.xml</path>
-        <path>~/Objects/customscript_amz_ss_error_retry.xml</path>
-        <path>~/Objects/customscript_amz_mr_settle_process.xml</path>
-        <path>~/Objects/customscript_amz_mr_return_process.xml</path>
-        <path>~/Objects/customscript_amz_ss_data_archival.xml</path>
-        <path>~/Objects/customscript_amz_ss_fba_inv_sync.xml</path>
-        <path>~/Objects/customscript_amz_ss_cancel_sync.xml</path>
-        <path>~/Objects/customscript_amz_ss_product_export.xml</path>
+        <path>~/Objects/*</path>
     </objects>
     <translationimports>
         <path>~/Translations/*</path>
