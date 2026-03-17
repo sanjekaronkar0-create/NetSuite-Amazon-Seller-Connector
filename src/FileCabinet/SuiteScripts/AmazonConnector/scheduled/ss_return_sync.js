@@ -14,8 +14,9 @@ define([
     '../lib/configHelper',
     '../lib/amazonClient',
     '../lib/logger',
-    '../services/returnService'
-], function (task, runtime, https, log, constants, configHelper, amazonClient, logger, returnService) {
+    '../services/returnService',
+    '../services/notificationService'
+], function (task, runtime, https, log, constants, configHelper, amazonClient, logger, returnService, notificationService) {
 
     function execute(context) {
         logger.progress(constants.LOG_TYPE.RETURN_SYNC, 'Return sync started');
@@ -34,6 +35,8 @@ define([
                         configId: config.configId,
                         details: e.stack
                     });
+                    notificationService.sendErrorNotification(config,
+                        'Return Sync Failed', 'Error: ' + e.message);
                 }
             }
 

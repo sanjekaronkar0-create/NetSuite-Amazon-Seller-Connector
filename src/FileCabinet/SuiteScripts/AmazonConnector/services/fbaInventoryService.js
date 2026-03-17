@@ -158,23 +158,46 @@ define([
 
     /**
      * Updates a NetSuite Inventory Adjustment for FBA location.
-     * Uses inventory detail subrecord to set quantity at FBA warehouse.
+     * Calculates the difference between current NS quantity and Amazon FBA quantity,
+     * then creates an adjustment for the delta (not the absolute amount).
      */
-    function updateNetSuiteItemQuantity(itemId, locationId, quantity) {
+    function updateNetSuiteItemQuantity(itemId, locationId, targetQuantity) {
         try {
-            // Use inventory adjustment to set FBA quantity
+            // Get current NetSuite quantity at FBA location
+            var currentQty = 0;
+            search.create({
+                type: 'item',
+                filters: [
+                    ['internalid', 'anyof', itemId],
+                    'AND',
+                    ['inventorylocation', 'anyof', locationId]
+                ],
+                columns: [
+                    search.createColumn({ name: 'locationquantityavailable', summary: 'SUM' })
+                ]
+            }).run().each(function (result) {
+                currentQty = parseInt(result.getValue({
+                    name: 'locationquantityavailable',
+                    summary: 'SUM'
+                }), 10) || 0;
+                return false;
+            });
+
+            var adjustBy = targetQuantity - currentQty;
+            if (adjustBy === 0) return; // No adjustment needed
+
             var adj = record.create({
                 type: record.Type.INVENTORY_ADJUSTMENT,
                 isDynamic: true
             });
 
             adj.setValue({ fieldId: 'adjlocation', value: locationId });
-            adj.setValue({ fieldId: 'memo', value: 'Amazon FBA Inventory Sync' });
+            adj.setValue({ fieldId: 'memo', value: 'Amazon FBA Inventory Sync (Target: ' + targetQuantity + ', Delta: ' + adjustBy + ')' });
 
             adj.selectNewLine({ sublistId: 'inventory' });
             adj.setCurrentSublistValue({ sublistId: 'inventory', fieldId: 'item', value: itemId });
             adj.setCurrentSublistValue({ sublistId: 'inventory', fieldId: 'location', value: locationId });
-            adj.setCurrentSublistValue({ sublistId: 'inventory', fieldId: 'adjustqtyby', value: quantity });
+            adj.setCurrentSublistValue({ sublistId: 'inventory', fieldId: 'adjustqtyby', value: adjustBy });
             adj.commitLine({ sublistId: 'inventory' });
 
             adj.save({ ignoreMandatoryFields: true });

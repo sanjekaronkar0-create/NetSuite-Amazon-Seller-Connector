@@ -11,8 +11,9 @@ define([
     '../lib/constants',
     '../lib/configHelper',
     '../lib/logger',
-    '../services/settlementService'
-], function (task, runtime, log, constants, configHelper, logger, settlementService) {
+    '../services/settlementService',
+    '../services/notificationService'
+], function (task, runtime, log, constants, configHelper, logger, settlementService, notificationService) {
 
     const CR = constants.CUSTOM_RECORDS.CONFIG;
 
@@ -54,6 +55,8 @@ define([
                         configId: config.configId,
                         details: e.stack
                     });
+                    notificationService.sendErrorNotification(config,
+                        'Settlement Sync Failed', 'Error: ' + e.message);
                 }
             }
 

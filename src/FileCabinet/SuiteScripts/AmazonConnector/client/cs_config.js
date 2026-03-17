@@ -62,9 +62,39 @@ define(['N/currentRecord', 'N/ui/dialog'], function (currentRecord, dialog) {
         return true;
     }
 
+    /**
+     * Tests connection for the first config or a user-specified config ID.
+     */
+    function testConnection() {
+        dialog.create({
+            title: 'Test Connection',
+            message: 'Enter the Configuration ID to test:',
+            buttons: [
+                { label: 'Test', value: 'test' },
+                { label: 'Cancel', value: 'cancel' }
+            ]
+        }).then(function (result) {
+            if (result === 'cancel') return;
+
+            // Prompt user for config ID
+            var configId = prompt('Enter Configuration Internal ID:');
+            if (!configId) return;
+
+            var rec = currentRecord.get();
+            rec.setValue({ fieldId: 'custpage_action', value: 'test_connection' });
+            rec.setValue({ fieldId: 'custpage_config_id', value: configId });
+
+            var form = document.getElementById('main_form');
+            if (form) {
+                form.submit();
+            }
+        });
+    }
+
     return {
         pageInit,
         triggerSync,
+        testConnection,
         saveRecord
     };
 });

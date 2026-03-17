@@ -12,8 +12,9 @@ define([
     '../lib/configHelper',
     '../lib/amazonClient',
     '../lib/logger',
-    '../services/catalogService'
-], function (runtime, log, constants, configHelper, amazonClient, logger, catalogService) {
+    '../services/catalogService',
+    '../services/notificationService'
+], function (runtime, log, constants, configHelper, amazonClient, logger, catalogService, notificationService) {
 
     function execute(context) {
         logger.progress(constants.LOG_TYPE.CATALOG_SYNC, 'Catalog sync started');
@@ -36,6 +37,8 @@ define([
                         configId: config.configId,
                         details: e.stack
                     });
+                    notificationService.sendErrorNotification(config,
+                        'Catalog Sync Failed', 'Error: ' + e.message);
                 }
             }
 

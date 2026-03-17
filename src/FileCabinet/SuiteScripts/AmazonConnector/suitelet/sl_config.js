@@ -16,8 +16,9 @@ define([
     'N/log',
     '../lib/constants',
     '../lib/configHelper',
-    '../lib/logger'
-], function (serverWidget, search, task, url, runtime, redirect, log, constants, configHelper, logger) {
+    '../lib/logger',
+    '../services/connectionTestService'
+], function (serverWidget, search, task, url, runtime, redirect, log, constants, configHelper, logger, connectionTestService) {
 
     const CR = constants.CUSTOM_RECORDS;
 
@@ -46,6 +47,7 @@ define([
         form.addButton({ id: 'custpage_btn_sync_cancel', label: 'Sync Cancellations', functionName: 'triggerSync("cancellations")' });
         form.addButton({ id: 'custpage_btn_sync_fba_inv', label: 'Sync FBA Inventory', functionName: 'triggerSync("fba_inventory")' });
         form.addButton({ id: 'custpage_btn_data_archival', label: 'Run Data Archival', functionName: 'triggerSync("archival")' });
+        form.addButton({ id: 'custpage_btn_test_conn', label: 'Test Connection', functionName: 'testConnection()' });
 
         form.clientScriptModulePath = '../client/cs_config.js';
 
@@ -56,6 +58,13 @@ define([
             label: 'Action'
         });
         actionField.updateDisplayType({ displayType: serverWidget.FieldDisplayType.HIDDEN });
+
+        var configIdField = form.addField({
+            id: 'custpage_config_id',
+            type: serverWidget.FieldType.TEXT,
+            label: 'Config ID'
+        });
+        configIdField.updateDisplayType({ displayType: serverWidget.FieldDisplayType.HIDDEN });
 
         // -- Configurations Tab --
         const configTab = form.addTab({ id: 'custpage_tab_configs', label: 'Marketplace Configurations' });
@@ -284,6 +293,21 @@ define([
                 fba_inventory: { s: constants.SCRIPT_IDS.SCHED_FBA_INV_SYNC, d: constants.DEPLOY_IDS.SCHED_FBA_INV_SYNC },
                 archival: { s: constants.SCRIPT_IDS.SCHED_DATA_ARCHIVAL, d: constants.DEPLOY_IDS.SCHED_DATA_ARCHIVAL }
             };
+            if (action === 'test_connection') {
+                var configId = context.request.parameters.custpage_config_id;
+                if (configId) {
+                    var config = configHelper.getConfig(configId);
+                    var testResults = connectionTestService.testConnection(config);
+                    var statusMsg = testResults.success ? 'Connection test PASSED' : 'Connection test FAILED';
+                    for (var s = 0; s < testResults.steps.length; s++) {
+                        statusMsg += '\n' + testResults.steps[s].step + ': ' +
+                            (testResults.steps[s].success ? 'OK' : 'FAILED') +
+                            ' - ' + testResults.steps[s].message;
+                    }
+                    logger.success(constants.LOG_TYPE.API_CALL, statusMsg, { configId: configId });
+                }
+            }
+
             const syncInfo = syncMap[action];
             if (syncInfo) {
                 triggerScheduledScript(syncInfo.s, syncInfo.d);

@@ -72,12 +72,34 @@ define([
                 return;
             }
 
+            // Separate new orders from existing orders needing status update
+            var newOrders = [];
+            for (var i = 0; i < orders.length; i++) {
+                var existing = orderService.findExistingOrderMap(orders[i].AmazonOrderId);
+                if (existing) {
+                    // Sync status changes for existing orders
+                    try {
+                        orderService.syncOrderStatus(config, orders[i], existing);
+                    } catch (statusErr) {
+                        log.debug({ title: 'Order Status Sync', details: 'Status sync error: ' + statusErr.message });
+                    }
+                } else {
+                    newOrders.push(orders[i]);
+                }
+            }
+
+            if (newOrders.length === 0) {
+                log.debug({ title: 'Order Sync', details: 'No new orders (all existing updated) for config ' + config.configId });
+                configHelper.updateLastSync(config.configId, CR.FIELDS.LAST_ORDER_SYNC);
+                return;
+            }
+
             log.audit({
                 title: 'Order Sync',
-                details: 'Found ' + orders.length + ' orders. Triggering Map/Reduce import.'
+                details: 'Found ' + newOrders.length + ' new orders (' + (orders.length - newOrders.length) + ' status updates). Triggering Map/Reduce import.'
             });
 
-            // Trigger Map/Reduce for bulk processing
+            // Trigger Map/Reduce for bulk processing of new orders
             const mrTask = task.create({
                 taskType: task.TaskType.MAP_REDUCE,
                 scriptId: constants.SCRIPT_IDS.MR_ORDER_IMPORT,
@@ -85,7 +107,7 @@ define([
                 params: {
                     custscript_amz_mr_order_data: JSON.stringify({
                         configId: config.configId,
-                        orders: orders
+                        orders: newOrders
                     })
                 }
             });
@@ -94,7 +116,7 @@ define([
             logger.success(constants.LOG_TYPE.ORDER_SYNC,
                 'Map/Reduce order import triggered. Task ID: ' + taskId, {
                 configId: config.configId,
-                details: 'Orders count: ' + orders.length
+                details: 'New orders: ' + newOrders.length + ', Status updates: ' + (orders.length - newOrders.length)
             });
 
             configHelper.updateLastSync(config.configId, CR.FIELDS.LAST_ORDER_SYNC);

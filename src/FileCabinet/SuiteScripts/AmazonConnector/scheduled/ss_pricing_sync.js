@@ -11,8 +11,9 @@ define([
     '../lib/constants',
     '../lib/configHelper',
     '../lib/logger',
-    '../services/pricingService'
-], function (runtime, log, constants, configHelper, logger, pricingService) {
+    '../services/pricingService',
+    '../services/notificationService'
+], function (runtime, log, constants, configHelper, logger, pricingService, notificationService) {
 
     function execute(context) {
         logger.progress(constants.LOG_TYPE.PRICING_SYNC, 'Pricing sync started');
@@ -35,6 +36,8 @@ define([
                         configId: config.configId,
                         details: e.stack
                     });
+                    notificationService.sendErrorNotification(config,
+                        'Pricing Sync Failed', 'Error: ' + e.message);
                 }
             }
 
@@ -65,10 +68,12 @@ define([
 
             // Only sync if price changed
             if (currentPrice !== item.lastPrice && currentPrice > 0) {
+                // Use marketplace-specific currency instead of hardcoded USD
+                var currency = constants.MARKETPLACE_CURRENCY[config.marketplaceId] || 'USD';
                 pricingData.push({
                     sellerSku: item.sellerSku,
                     price: currentPrice,
-                    currency: 'USD',
+                    currency: currency,
                     mapId: item.mapId
                 });
             }

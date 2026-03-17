@@ -11,8 +11,9 @@ define([
     'N/log',
     '../lib/constants',
     '../lib/configHelper',
-    '../lib/logger'
-], function (task, runtime, log, constants, configHelper, logger) {
+    '../lib/logger',
+    '../services/notificationService'
+], function (task, runtime, log, constants, configHelper, logger, notificationService) {
 
     const CR = constants.CUSTOM_RECORDS.CONFIG;
 
@@ -52,6 +53,8 @@ define([
                         configId: config.configId,
                         details: e.stack
                     });
+                    notificationService.sendErrorNotification(config,
+                        'Inventory Sync Failed', 'Error: ' + e.message);
                 }
             }
 

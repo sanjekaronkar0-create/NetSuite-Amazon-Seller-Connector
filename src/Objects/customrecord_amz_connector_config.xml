@@ -366,5 +366,117 @@
       <description>Initial delay between retry attempts (doubles each retry)</description>
     </customrecordcustomfield>
 
+    <!-- Notification Settings -->
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_notify_error">
+      <label>Notify on Errors</label>
+      <fieldtype>CHECKBOX</fieldtype>
+      <defaultvalue>T</defaultvalue>
+      <displaytype>NORMAL</displaytype>
+      <description>Send email notifications when sync errors occur</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_notify_email">
+      <label>Notification Email</label>
+      <fieldtype>CLOBTEXT</fieldtype>
+      <displaytype>NORMAL</displaytype>
+      <description>Email address for sync notifications and alerts</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_notify_sync">
+      <label>Notify on Sync Complete</label>
+      <fieldtype>CHECKBOX</fieldtype>
+      <defaultvalue>F</defaultvalue>
+      <displaytype>NORMAL</displaytype>
+      <description>Send email summary after each sync cycle completes</description>
+    </customrecordcustomfield>
+
+    <!-- Sync Interval Configuration -->
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_order_interval">
+      <label>Order Sync Interval (Minutes)</label>
+      <fieldtype>INTEGER</fieldtype>
+      <displaytype>NORMAL</displaytype>
+      <defaultvalue>15</defaultvalue>
+      <description>How frequently to poll for new Amazon orders</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_inv_interval">
+      <label>Inventory Sync Interval (Minutes)</label>
+      <fieldtype>INTEGER</fieldtype>
+      <displaytype>NORMAL</displaytype>
+      <defaultvalue>60</defaultvalue>
+      <description>How frequently to push inventory levels to Amazon</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_settle_interval">
+      <label>Settlement Sync Interval (Minutes)</label>
+      <fieldtype>INTEGER</fieldtype>
+      <displaytype>NORMAL</displaytype>
+      <defaultvalue>1440</defaultvalue>
+      <description>How frequently to fetch settlement reports</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_return_interval">
+      <label>Return Sync Interval (Minutes)</label>
+      <fieldtype>INTEGER</fieldtype>
+      <displaytype>NORMAL</displaytype>
+      <defaultvalue>240</defaultvalue>
+      <description>How frequently to fetch return reports</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_pricing_interval">
+      <label>Pricing Sync Interval (Minutes)</label>
+      <fieldtype>INTEGER</fieldtype>
+      <displaytype>NORMAL</displaytype>
+      <defaultvalue>1440</defaultvalue>
+      <description>How frequently to push pricing updates to Amazon</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_catalog_interval">
+      <label>Catalog Sync Interval (Minutes)</label>
+      <fieldtype>INTEGER</fieldtype>
+      <displaytype>NORMAL</displaytype>
+      <defaultvalue>1440</defaultvalue>
+      <description>How frequently to sync catalog/listings from Amazon</description>
+    </customrecordcustomfield>
+
+    <!-- Log Archival -->
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_log_retention">
+      <label>Log Retention Days</label>
+      <fieldtype>INTEGER</fieldtype>
+      <displaytype>NORMAL</displaytype>
+      <defaultvalue>30</defaultvalue>
+      <description>Number of days to retain integration logs before archival</description>
+    </customrecordcustomfield>
+
+    <!-- FBA Inventory Sync -->
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_fba_inv_sync">
+      <label>FBA Inventory Sync Enabled</label>
+      <fieldtype>CHECKBOX</fieldtype>
+      <defaultvalue>F</defaultvalue>
+      <displaytype>NORMAL</displaytype>
+      <description>Pull FBA inventory levels from Amazon into NetSuite</description>
+    </customrecordcustomfield>
+
+    <!-- Order Cancellation Settings -->
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_cancel_enabled">
+      <label>Cancellation Sync Enabled</label>
+      <fieldtype>CHECKBOX</fieldtype>
+      <defaultvalue>F</defaultvalue>
+      <displaytype>NORMAL</displaytype>
+      <description>Sync order cancellations from Amazon and close NetSuite orders</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_cancel_action">
+      <label>Cancellation Action</label>
+      <fieldtype>CLOBTEXT</fieldtype>
+      <displaytype>NORMAL</displaytype>
+      <description>Action to take on cancelled orders: CLOSE or VOID</description>
+    </customrecordcustomfield>
+
   </customrecordcustomfields>
 </customrecordtype>

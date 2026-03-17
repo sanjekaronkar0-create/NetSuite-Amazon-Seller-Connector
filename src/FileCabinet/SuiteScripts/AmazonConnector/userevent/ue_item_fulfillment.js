@@ -14,8 +14,9 @@ define([
     '../lib/configHelper',
     '../lib/logger',
     '../services/fulfillmentService',
-    '../services/orderService'
-], function (record, log, runtime, constants, configHelper, logger, fulfillmentService, orderService) {
+    '../services/orderService',
+    '../lib/errorQueue'
+], function (record, log, runtime, constants, configHelper, logger, fulfillmentService, orderService, errorQueue) {
 
     /**
      * After Submit: Send fulfillment data to Amazon when a fulfillment is created.
@@ -85,6 +86,20 @@ define([
                 recordId: fulfillmentRec.id,
                 details: e.stack
             });
+            // Queue for retry
+            try {
+                errorQueue.enqueue({
+                    type: constants.ERROR_QUEUE_TYPE.FULFILLMENT,
+                    configId: orderLink ? orderLink.configId : '',
+                    amazonRef: orderLink ? orderLink.amazonOrderId : '',
+                    nsRecordType: 'itemfulfillment',
+                    nsRecordId: fulfillmentRec.id,
+                    errorMessage: e.message,
+                    errorDetails: e.stack
+                });
+            } catch (qErr) {
+                log.error({ title: 'Error Queue', details: 'Failed to enqueue: ' + qErr.message });
+            }
         }
     }
 

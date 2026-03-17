@@ -12,8 +12,9 @@ define([
     '../lib/constants',
     '../lib/amazonClient',
     '../lib/logger',
-    '../lib/errorQueue'
-], function (record, search, log, constants, amazonClient, logger, errorQueue) {
+    '../lib/errorQueue',
+    './customerService'
+], function (record, search, log, constants, amazonClient, logger, errorQueue, customerService) {
 
     const OM = constants.CUSTOM_RECORDS.ORDER_MAP;
     const IM = constants.CUSTOM_RECORDS.ITEM_MAP;
@@ -112,12 +113,16 @@ define([
     function createSalesOrder(config, amazonOrder, orderItems) {
         const useCashSale = config.orderType === constants.ORDER_TYPE.CASH_SALE;
         const isFBA = amazonOrder.FulfillmentChannel === 'AFN';
+        const isB2B = amazonOrder.IsBusinessOrder === true || amazonOrder.IsBusinessOrder === 'true';
 
         const recType = useCashSale ? record.Type.CASH_SALE : record.Type.SALES_ORDER;
         const txn = record.create({ type: recType, isDynamic: true });
 
-        // Use FBA-specific customer/location if configured
-        const customer = isFBA && config.fbaCustomer ? config.fbaCustomer : config.customer;
+        // Resolve customer: B2B → FBA → email lookup → create new → default
+        const customer = customerService.resolveCustomer(config, amazonOrder, {
+            useDefault: true,
+            createIfMissing: true
+        });
         const location = isFBA && config.fbaLocation ? config.fbaLocation : config.location;
 
         if (customer) txn.setValue({ fieldId: 'entity', value: customer });
@@ -132,10 +137,28 @@ define([
         }
 
         txn.setValue({ fieldId: 'otherrefnum', value: amazonOrder.AmazonOrderId });
+        var memoPrefix = isFBA ? 'Amazon FBA Order: ' : 'Amazon Order: ';
+        if (isB2B) memoPrefix = 'Amazon B2B Order: ';
         txn.setValue({
             fieldId: 'memo',
-            value: (isFBA ? 'Amazon FBA Order: ' : 'Amazon Order: ') + amazonOrder.AmazonOrderId
+            value: memoPrefix + amazonOrder.AmazonOrderId
         });
+
+        // Store gift message if present
+        if (amazonOrder.IsGift === true || amazonOrder.IsGift === 'true') {
+            var giftMsg = amazonOrder.GiftMessageText || '';
+            if (giftMsg) {
+                try {
+                    txn.setValue({ fieldId: 'custbody_amz_gift_message', value: giftMsg.substring(0, 999) });
+                } catch (giftErr) {
+                    // Gift message field may not exist - store in memo instead
+                    txn.setValue({
+                        fieldId: 'memo',
+                        value: memoPrefix + amazonOrder.AmazonOrderId + ' | Gift: ' + giftMsg.substring(0, 200)
+                    });
+                }
+            }
+        }
 
         if (amazonOrder.PurchaseDate) {
             txn.setValue({ fieldId: 'trandate', value: new Date(amazonOrder.PurchaseDate) });
@@ -365,6 +388,68 @@ define([
         });
     }
 
+    /**
+     * Syncs Amazon order status changes back to the NetSuite transaction.
+     * Updates the order map status and optionally closes/updates the NS transaction.
+     * @param {Object} config - Connector config
+     * @param {Object} amazonOrder - Amazon order with current status
+     * @param {Object} existingMap - Existing order map record
+     */
+    function syncOrderStatus(config, amazonOrder, existingMap) {
+        const newStatus = mapAmazonStatus(amazonOrder.OrderStatus);
+        const oldStatus = existingMap.status;
+
+        // No change
+        if (newStatus === oldStatus) return;
+
+        // Update the mapping record
+        updateOrderMapStatus(existingMap.id, newStatus);
+
+        var txnId = existingMap.nsOrderId || existingMap.nsCashSaleId;
+        if (!txnId) return;
+
+        var txnType = existingMap.nsOrderId ? record.Type.SALES_ORDER : record.Type.CASH_SALE;
+
+        // Handle specific status transitions
+        if (amazonOrder.OrderStatus === 'Canceled' && existingMap.nsOrderId) {
+            // Close the Sales Order
+            try {
+                record.submitFields({
+                    type: txnType,
+                    id: txnId,
+                    values: { orderstatus: 'C' }  // Closed
+                });
+                logger.success(constants.LOG_TYPE.ORDER_SYNC,
+                    'Closed SO ' + txnId + ' for canceled Amazon order ' + amazonOrder.AmazonOrderId, {
+                    configId: config.configId,
+                    recordType: txnType,
+                    recordId: txnId,
+                    amazonRef: amazonOrder.AmazonOrderId
+                });
+            } catch (e) {
+                logger.warn(constants.LOG_TYPE.ORDER_SYNC,
+                    'Could not close SO ' + txnId + ': ' + e.message, {
+                    configId: config.configId,
+                    amazonRef: amazonOrder.AmazonOrderId
+                });
+            }
+        }
+
+        // Update memo with status change
+        try {
+            record.submitFields({
+                type: txnType,
+                id: txnId,
+                values: {
+                    custbody_amz_order_status: amazonOrder.OrderStatus
+                }
+            });
+        } catch (e) {
+            // custbody_amz_order_status may not exist - not critical
+            log.debug({ title: 'Order Status Sync', details: 'Could not update status field: ' + e.message });
+        }
+    }
+
     return {
         fetchAmazonOrders,
         findExistingOrderMap,
@@ -372,6 +457,7 @@ define([
         createSalesOrder,
         createOrderMapRecord,
         updateOrderMapStatus,
+        syncOrderStatus,
         mapAmazonStatus
     };
 });
