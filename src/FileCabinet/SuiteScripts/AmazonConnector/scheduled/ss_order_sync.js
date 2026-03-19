@@ -66,6 +66,17 @@ define([
 
             const orders = orderService.fetchAmazonOrders(config, lastSync);
 
+            // Track the latest PurchaseDate for partial sync recovery
+            var latestOrderDate = null;
+            for (var k = 0; k < orders.length; k++) {
+                if (orders[k].PurchaseDate) {
+                    var d = new Date(orders[k].PurchaseDate);
+                    if (!latestOrderDate || d > latestOrderDate) {
+                        latestOrderDate = d;
+                    }
+                }
+            }
+
             if (orders.length === 0) {
                 log.debug({ title: 'Order Sync', details: 'No new orders for config ' + config.configId });
                 configHelper.updateLastSync(config.configId, CR.FIELDS.LAST_ORDER_SYNC);
@@ -133,22 +144,45 @@ define([
                 details: 'New orders: ' + newOrders.length + ', Status updates: ' + (orders.length - newOrders.length)
             });
 
-            // Only update lastSync if all orders were processed; skip if we broke early due to low governance
+            // Update lastSync based on processing completeness
             if (!lowGovernance) {
                 configHelper.updateLastSync(config.configId, CR.FIELDS.LAST_ORDER_SYNC);
+            } else if (latestOrderDate) {
+                // Partial fetch: advance lastSync to latest order minus safety margin
+                var partialSync = new Date(latestOrderDate.getTime() - 60000);
+                log.audit({
+                    title: 'Order Sync',
+                    details: 'Partial sync: advancing lastSync to ' + partialSync.toISOString() +
+                        ' (latest order: ' + latestOrderDate.toISOString() + ')'
+                });
+                configHelper.updateLastSync(config.configId, CR.FIELDS.LAST_ORDER_SYNC, partialSync);
+                reschedule();
             } else {
                 log.audit({ title: 'Order Sync', details: 'Skipping lastSync update due to low governance - remaining orders will be picked up next run' });
                 reschedule();
             }
 
         } catch (e) {
-            logger.error(constants.LOG_TYPE.ORDER_SYNC,
-                'Order sync failed for config ' + config.configId + ': ' + e.message, {
-                configId: config.configId,
-                details: e.stack
-            });
-            notificationService.sendErrorNotification(config,
-                'Order Sync Failed', 'Error: ' + e.message);
+            var is429 = e.message && e.message.indexOf('HTTP 429') !== -1;
+
+            if (is429) {
+                // 429 is transient - warn and reschedule, don't send error notification
+                logger.warn(constants.LOG_TYPE.ORDER_SYNC,
+                    'Order sync rate-limited for config ' + config.configId +
+                    '. Will retry on next scheduled run.', {
+                    configId: config.configId,
+                    details: e.message
+                });
+                reschedule();
+            } else {
+                logger.error(constants.LOG_TYPE.ORDER_SYNC,
+                    'Order sync failed for config ' + config.configId + ': ' + e.message, {
+                    configId: config.configId,
+                    details: e.stack
+                });
+                notificationService.sendErrorNotification(config,
+                    'Order Sync Failed', 'Error: ' + e.message);
+            }
         }
     }
 
