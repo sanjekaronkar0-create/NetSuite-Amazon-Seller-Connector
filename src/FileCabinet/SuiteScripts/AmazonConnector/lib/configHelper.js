@@ -5,9 +5,10 @@
  *              Supports all sync toggles, financial accounts, FBA settings,
  *              and multi-marketplace configuration.
  */
-define(['N/search', 'N/record', 'N/log', './constants'], function (search, record, log, constants) {
+define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (search, record, log, runtime, constants) {
 
     const CR = constants.CUSTOM_RECORDS.CONFIG;
+    const isOneWorld = runtime.isFeatureInEffect({ feature: 'SUBSIDIARIES' });
 
     /**
      * Loads all active configuration records.
@@ -27,20 +28,22 @@ define(['N/search', 'N/record', 'N/log', './constants'], function (search, recor
             columns: searchColumns
         }).run().each(function (result) {
             const cfg = mapResultToConfig(result);
-            try {
-                var looked = search.lookupFields({
-                    type: CR.ID,
-                    id: result.id,
-                    columns: unsearchableColumns
-                });
-                cfg.subsidiary = looked[CR.FIELDS.SUBSIDIARY]
-                    ? (looked[CR.FIELDS.SUBSIDIARY][0]
-                        ? looked[CR.FIELDS.SUBSIDIARY][0].value
-                        : looked[CR.FIELDS.SUBSIDIARY])
-                    : null;
-            } catch (e) {
-                log.debug({ title: 'getAllConfigs', details: 'Could not look up subsidiary for config ' + result.id + ': ' + e.message });
-                cfg.subsidiary = null;
+            if (isOneWorld) {
+                try {
+                    var looked = search.lookupFields({
+                        type: CR.ID,
+                        id: result.id,
+                        columns: unsearchableColumns
+                    });
+                    cfg.subsidiary = looked[CR.FIELDS.SUBSIDIARY]
+                        ? (looked[CR.FIELDS.SUBSIDIARY][0]
+                            ? looked[CR.FIELDS.SUBSIDIARY][0].value
+                            : looked[CR.FIELDS.SUBSIDIARY])
+                        : null;
+                } catch (e) {
+                    log.debug({ title: 'getAllConfigs', details: 'Could not look up subsidiary for config ' + result.id + ': ' + e.message });
+                    cfg.subsidiary = null;
+                }
             }
             configs.push(cfg);
             return true;
@@ -84,7 +87,7 @@ define(['N/search', 'N/record', 'N/log', './constants'], function (search, recor
             endpoint: result.getValue(CR.FIELDS.ENDPOINT),
             marketplaceId: result.getValue(CR.FIELDS.MARKETPLACE_ID),
             // NetSuite Mapping
-            subsidiary: (function () { try { return result.getValue(CR.FIELDS.SUBSIDIARY); } catch (e) { return null; } })(),
+            subsidiary: null,
             location: result.getValue(CR.FIELDS.LOCATION),
             customer: result.getValue(CR.FIELDS.CUSTOMER),
             paymentMethod: result.getValue(CR.FIELDS.PAYMENT_METHOD),
@@ -167,7 +170,7 @@ define(['N/search', 'N/record', 'N/log', './constants'], function (search, recor
             refreshToken: getValue(CR.FIELDS.REFRESH_TOKEN),
             endpoint: getValue(CR.FIELDS.ENDPOINT),
             marketplaceId: getValue(CR.FIELDS.MARKETPLACE_ID),
-            subsidiary: getValue(CR.FIELDS.SUBSIDIARY),
+            subsidiary: isOneWorld ? getValue(CR.FIELDS.SUBSIDIARY) : null,
             location: getValue(CR.FIELDS.LOCATION),
             customer: getValue(CR.FIELDS.CUSTOMER),
             paymentMethod: getValue(CR.FIELDS.PAYMENT_METHOD),
