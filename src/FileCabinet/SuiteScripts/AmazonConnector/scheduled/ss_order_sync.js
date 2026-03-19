@@ -12,9 +12,10 @@ define([
     '../lib/constants',
     '../lib/configHelper',
     '../lib/logger',
+    '../lib/mrDataHelper',
     '../services/orderService',
     '../services/notificationService'
-], function (task, runtime, log, constants, configHelper, logger, orderService, notificationService) {
+], function (task, runtime, log, constants, configHelper, logger, mrDataHelper, orderService, notificationService) {
 
     const CR = constants.CUSTOM_RECORDS.CONFIG;
 
@@ -124,20 +125,29 @@ define([
                 details: 'Found ' + newOrders.length + ' new orders (' + (orders.length - newOrders.length) + ' status updates). Triggering Map/Reduce import.'
             });
 
+            // Write order data to File Cabinet (script params are too small for JSON)
+            var fileId = mrDataHelper.writeDataFile({
+                configId: config.configId,
+                orders: newOrders
+            }, 'orders');
+
             // Trigger Map/Reduce for bulk processing of new orders
             const mrTask = task.create({
                 taskType: task.TaskType.MAP_REDUCE,
                 scriptId: constants.SCRIPT_IDS.MR_ORDER_IMPORT,
                 deploymentId: constants.DEPLOY_IDS.MR_ORDER_IMPORT,
                 params: {
-                    custscript_amz_mr_order_data: JSON.stringify({
-                        configId: config.configId,
-                        orders: newOrders
-                    })
+                    custscript_amz_mr_order_data: String(fileId)
                 }
             });
 
-            const taskId = mrTask.submit();
+            var taskId = mrDataHelper.submitMrTask(mrTask, constants.LOG_TYPE.ORDER_SYNC, logger);
+            if (!taskId) {
+                // MR already running - clean up temp file, orders will be re-fetched next run
+                mrDataHelper.deleteTempFile(fileId);
+                return;
+            }
+
             logger.success(constants.LOG_TYPE.ORDER_SYNC,
                 'Map/Reduce order import triggered. Task ID: ' + taskId, {
                 configId: config.configId,

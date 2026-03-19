@@ -12,8 +12,9 @@ define([
     '../lib/constants',
     '../lib/configHelper',
     '../lib/logger',
+    '../lib/mrDataHelper',
     '../services/notificationService'
-], function (task, runtime, log, constants, configHelper, logger, notificationService) {
+], function (task, runtime, log, constants, configHelper, logger, mrDataHelper, notificationService) {
 
     const CR = constants.CUSTOM_RECORDS.CONFIG;
 
@@ -39,7 +40,11 @@ define([
                         }
                     });
 
-                    const taskId = mrTask.submit();
+                    var taskId = mrDataHelper.submitMrTask(mrTask, constants.LOG_TYPE.INVENTORY_SYNC, logger);
+                    if (!taskId) {
+                        continue;
+                    }
+
                     logger.success(constants.LOG_TYPE.INVENTORY_SYNC,
                         'Inventory export Map/Reduce triggered. Task ID: ' + taskId, {
                         configId: config.configId

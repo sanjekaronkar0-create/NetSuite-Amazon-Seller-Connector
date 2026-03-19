@@ -14,9 +14,10 @@ define([
     '../lib/configHelper',
     '../lib/amazonClient',
     '../lib/logger',
+    '../lib/mrDataHelper',
     '../services/returnService',
     '../services/notificationService'
-], function (task, runtime, https, log, constants, configHelper, amazonClient, logger, returnService, notificationService) {
+], function (task, runtime, https, log, constants, configHelper, amazonClient, logger, mrDataHelper, returnService, notificationService) {
 
     function execute(context) {
         logger.progress(constants.LOG_TYPE.RETURN_SYNC, 'Return sync started');
@@ -106,20 +107,28 @@ define([
             details: 'Found ' + returnRows.length + ' return entries. Triggering Map/Reduce processing.'
         });
 
+        // Write return data to File Cabinet (script params are too small for JSON)
+        var fileId = mrDataHelper.writeDataFile({
+            configId: config.configId,
+            returns: returnRows
+        }, 'returns');
+
         // Delegate bulk return processing to Map/Reduce
         var mrTask = task.create({
             taskType: task.TaskType.MAP_REDUCE,
             scriptId: constants.SCRIPT_IDS.MR_RETURN_PROCESS,
             deploymentId: constants.DEPLOY_IDS.MR_RETURN_PROCESS,
             params: {
-                custscript_amz_mr_return_data: JSON.stringify({
-                    configId: config.configId,
-                    returns: returnRows
-                })
+                custscript_amz_mr_return_data: String(fileId)
             }
         });
 
-        var taskId = mrTask.submit();
+        var taskId = mrDataHelper.submitMrTask(mrTask, constants.LOG_TYPE.RETURN_SYNC, logger);
+        if (!taskId) {
+            mrDataHelper.deleteTempFile(fileId);
+            return;
+        }
+
         logger.success(constants.LOG_TYPE.RETURN_SYNC,
             'Return Map/Reduce triggered. Task ID: ' + taskId, {
             configId: config.configId,
