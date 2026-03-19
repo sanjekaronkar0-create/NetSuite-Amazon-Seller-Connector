@@ -8,13 +8,14 @@
 define([
     'N/record',
     'N/search',
+    'N/runtime',
     'N/log',
     '../lib/constants',
     '../lib/amazonClient',
     '../lib/logger',
     '../lib/errorQueue',
     './customerService'
-], function (record, search, log, constants, amazonClient, logger, errorQueue, customerService) {
+], function (record, search, runtime, log, constants, amazonClient, logger, errorQueue, customerService) {
 
     const OM = constants.CUSTOM_RECORDS.ORDER_MAP;
     const IM = constants.CUSTOM_RECORDS.ITEM_MAP;
@@ -33,6 +34,16 @@ define([
             const orders = payload.Orders || [];
             allOrders.push(...orders);
             nextToken = payload.NextToken || null;
+
+            // Check governance before fetching next page
+            if (nextToken) {
+                const remaining = runtime.getCurrentScript().getRemainingUsage();
+                if (remaining < 500) {
+                    logger.warn(constants.LOG_TYPE.ORDER_SYNC,
+                        'Low governance (' + remaining + ') during order fetch, stopping pagination. Fetched ' + allOrders.length + ' orders so far.');
+                    break;
+                }
+            }
         } while (nextToken);
 
         return allOrders;

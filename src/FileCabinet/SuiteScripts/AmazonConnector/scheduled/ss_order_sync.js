@@ -74,7 +74,21 @@ define([
 
             // Separate new orders from existing orders needing status update
             var newOrders = [];
+            var lowGovernance = false;
             for (var i = 0; i < orders.length; i++) {
+                // Check governance before each order lookup/update
+                var remaining = runtime.getCurrentScript().getRemainingUsage();
+                if (remaining < 500) {
+                    logger.warn(constants.LOG_TYPE.ORDER_SYNC,
+                        'Low governance (' + remaining + ') during order processing, processed ' + i + '/' + orders.length + ' orders');
+                    // Add remaining unprocessed orders as new to let MR handle them
+                    for (var j = i; j < orders.length; j++) {
+                        newOrders.push(orders[j]);
+                    }
+                    lowGovernance = true;
+                    break;
+                }
+
                 var existing = orderService.findExistingOrderMap(orders[i].AmazonOrderId);
                 if (existing) {
                     // Sync status changes for existing orders
@@ -119,7 +133,13 @@ define([
                 details: 'New orders: ' + newOrders.length + ', Status updates: ' + (orders.length - newOrders.length)
             });
 
-            configHelper.updateLastSync(config.configId, CR.FIELDS.LAST_ORDER_SYNC);
+            // Only update lastSync if all orders were processed; skip if we broke early due to low governance
+            if (!lowGovernance) {
+                configHelper.updateLastSync(config.configId, CR.FIELDS.LAST_ORDER_SYNC);
+            } else {
+                log.audit({ title: 'Order Sync', details: 'Skipping lastSync update due to low governance - remaining orders will be picked up next run' });
+                reschedule();
+            }
 
         } catch (e) {
             logger.error(constants.LOG_TYPE.ORDER_SYNC,
