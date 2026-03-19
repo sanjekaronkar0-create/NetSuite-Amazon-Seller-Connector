@@ -27,24 +27,55 @@ define([
     function fetchAmazonOrders(config, createdAfter) {
         const allOrders = [];
         let nextToken = null;
+        let pageCount = 0;
+        const PAGINATION_DELAY_MS = 3000;
 
         do {
-            const response = amazonClient.getOrders(config, createdAfter, nextToken);
+            let response;
+            try {
+                response = amazonClient.getOrders(config, createdAfter, nextToken);
+            } catch (fetchErr) {
+                // If we already have some orders, return them rather than losing everything
+                if (allOrders.length > 0) {
+                    logger.warn(constants.LOG_TYPE.ORDER_SYNC,
+                        'Order fetch failed on page ' + (pageCount + 1) +
+                        ' but returning ' + allOrders.length +
+                        ' orders from previous pages. Error: ' + fetchErr.message);
+                    return allOrders;
+                }
+                throw fetchErr;
+            }
+
             const payload = response.payload || response;
             const orders = payload.Orders || [];
             allOrders.push(...orders);
             nextToken = payload.NextToken || null;
+            pageCount++;
 
-            // Check governance before fetching next page
             if (nextToken) {
+                // Check governance before fetching next page
                 const remaining = runtime.getCurrentScript().getRemainingUsage();
                 if (remaining < 500) {
                     logger.warn(constants.LOG_TYPE.ORDER_SYNC,
-                        'Low governance (' + remaining + ') during order fetch, stopping pagination. Fetched ' + allOrders.length + ' orders so far.');
+                        'Low governance (' + remaining + ') during order fetch, stopping pagination at page ' +
+                        pageCount + '. Fetched ' + allOrders.length + ' orders so far.');
                     break;
                 }
+
+                // Delay between pagination requests to avoid exhausting burst quota
+                log.debug({
+                    title: 'Order Pagination',
+                    details: 'Page ' + pageCount + ' fetched (' + orders.length +
+                        ' orders). Waiting ' + PAGINATION_DELAY_MS + 'ms before next page.'
+                });
+                amazonClient.busyWait(PAGINATION_DELAY_MS);
             }
         } while (nextToken);
+
+        log.audit({
+            title: 'Order Fetch Complete',
+            details: 'Fetched ' + allOrders.length + ' orders across ' + pageCount + ' pages'
+        });
 
         return allOrders;
     }

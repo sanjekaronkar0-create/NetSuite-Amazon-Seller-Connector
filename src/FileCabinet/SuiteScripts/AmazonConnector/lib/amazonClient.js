@@ -36,6 +36,23 @@ define(['N/https', 'N/log', './amazonAuth', './constants', './logger'],
     // Track last request time per endpoint for rate limiting
     const lastRequestTime = {};
 
+    // 429 retry configuration
+    const RETRY_429_MAX_ATTEMPTS = 3;
+    const RETRY_429_DELAYS = [5000, 15000, 30000]; // 5s, 15s, 30s exponential backoff
+
+    /**
+     * Blocks execution for the specified number of milliseconds using a busy-wait loop.
+     * This is the only delay option in SuiteScript 2.x (no sleep/setTimeout).
+     * Does NOT consume governance units.
+     * @param {number} ms - Milliseconds to wait
+     */
+    function busyWait(ms) {
+        var start = Date.now();
+        while (Date.now() - start < ms) {
+            // spin
+        }
+    }
+
     /**
      * Determines the rate limit key for a given API path.
      */
@@ -60,19 +77,28 @@ define(['N/https', 'N/log', './amazonAuth', './constants', './logger'],
         const limit = constants.RATE_LIMITS[key] || constants.RATE_LIMITS.DEFAULT;
         const minInterval = 1000 / limit.rate; // Minimum ms between requests
 
+        // For high-burst endpoints, use a shorter effective interval based on burst capacity
+        // rather than the sustained rate (e.g., ~6s for ORDERS_GET instead of 60s)
+        const effectiveMinInterval = limit.burst > 10
+            ? Math.max(1000, minInterval / limit.burst * 2)
+            : minInterval;
+
         const now = Date.now();
         const last = lastRequestTime[key] || 0;
         const elapsed = now - last;
 
-        if (elapsed < minInterval) {
-            // Log throttle but don't block - SuiteScript doesn't have sleep
+        if (elapsed < effectiveMinInterval) {
+            const waitTime = Math.min(effectiveMinInterval - elapsed, 60000);
             log.debug({
                 title: 'SP-API Rate Limit',
-                details: 'Rate limit approaching for ' + key + '. Interval: ' + elapsed + 'ms, min: ' + minInterval + 'ms'
+                details: 'Enforcing rate limit for ' + key +
+                    '. Waiting ' + waitTime + 'ms (elapsed: ' + elapsed +
+                    'ms, min: ' + effectiveMinInterval + 'ms)'
             });
+            busyWait(waitTime);
         }
 
-        lastRequestTime[key] = now;
+        lastRequestTime[key] = Date.now();
     }
 
     /**
@@ -101,11 +127,24 @@ define(['N/https', 'N/log', './amazonAuth', './constants', './logger'],
             response = executeRequest(method, url, token, options.body);
         }
 
-        // Handle 429 Too Many Requests - retry once after logging
+        // Handle 429 Too Many Requests - retry with exponential backoff
         if (response.code === 429) {
-            log.audit({ title: 'SP-API 429', details: 'Rate limited on ' + options.path + ', retrying once' });
-            lastRequestTime[getRateLimitKey(options.path)] = Date.now();
-            response = executeRequest(method, url, token, options.body);
+            var rateLimitKey = getRateLimitKey(options.path);
+            for (var attempt = 0; attempt < RETRY_429_MAX_ATTEMPTS; attempt++) {
+                var delayMs = RETRY_429_DELAYS[attempt] || RETRY_429_DELAYS[RETRY_429_DELAYS.length - 1];
+                log.audit({
+                    title: 'SP-API 429 Retry',
+                    details: 'Rate limited on ' + options.path +
+                        '. Attempt ' + (attempt + 1) + '/' + RETRY_429_MAX_ATTEMPTS +
+                        ', waiting ' + delayMs + 'ms before retry'
+                });
+                busyWait(delayMs);
+                lastRequestTime[rateLimitKey] = Date.now();
+                response = executeRequest(method, url, token, options.body);
+                if (response.code !== 429) {
+                    break;
+                }
+            }
         }
 
         if (response.code < 200 || response.code >= 300) {
@@ -351,6 +390,7 @@ define(['N/https', 'N/log', './amazonAuth', './constants', './logger'],
         get,
         post,
         put,
+        busyWait,
         getOrders,
         getOrderItems,
         getOrderBuyerInfo,
