@@ -96,6 +96,14 @@
       <description>Linked NetSuite deposit/journal entry</description>
     </customrecordcustomfield>
 
+    <customrecordcustomfield scriptid="custrecord_amz_stl_ns_journal">
+      <label>NetSuite Journal Entry</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>-30</selectrecordtype>
+      <displaytype>NORMAL</displaytype>
+      <description>Linked NetSuite journal entry for fee reconciliation</description>
+    </customrecordcustomfield>
+
     <customrecordcustomfield scriptid="custrecord_amz_stl_status">
       <label>Processing Status</label>
       <fieldtype>SELECT</fieldtype>

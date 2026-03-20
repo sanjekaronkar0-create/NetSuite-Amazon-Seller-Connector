@@ -8,6 +8,7 @@
 define([
     'N/runtime',
     'N/log',
+    'N/search',
     '../lib/constants',
     '../lib/configHelper',
     '../lib/errorQueue',
@@ -18,7 +19,7 @@ define([
     '../services/fulfillmentService',
     '../services/pricingService',
     '../services/notificationService'
-], function (runtime, log, constants, configHelper, errorQueue, logger,
+], function (runtime, log, search, constants, configHelper, errorQueue, logger,
     orderService, returnService, financialService, fulfillmentService, pricingService, notificationService) {
 
     function execute(context) {
@@ -175,9 +176,7 @@ define([
 
             // Find recently failed items (failed in the last hour)
             var oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-            var N_search = require('N/search');
-
-            N_search.create({
+            search.create({
                 type: EQ.ID,
                 filters: [
                     [EQ.FIELDS.STATUS, 'anyof', [constants.ERROR_QUEUE_STATUS.FAILED]],

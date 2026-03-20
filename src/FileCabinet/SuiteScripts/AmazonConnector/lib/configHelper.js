@@ -14,13 +14,60 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
      * Loads all active configuration records.
      * @returns {Array<Object>} Array of config objects
      */
+    // SELECT fields referencing entity/record types (Customer -2, Subsidiary -117,
+    // Location -103, Account -112, Item -10, Tax Code -127) can cause
+    // SSS_INVALID_SRCH_COL when used as search columns on custom records.
+    // Fetch these via lookupFields instead.
+    const LOOKUP_ONLY_FIELDS = [
+        CR.FIELDS.SUBSIDIARY,
+        CR.FIELDS.CUSTOMER,
+        CR.FIELDS.FBA_CUSTOMER,
+        CR.FIELDS.B2B_CUSTOMER,
+        CR.FIELDS.LOCATION,
+        CR.FIELDS.FBA_LOCATION,
+        CR.FIELDS.SETTLE_ACCOUNT,
+        CR.FIELDS.FEE_ACCOUNT,
+        CR.FIELDS.FBA_FEE_ACCOUNT,
+        CR.FIELDS.REFUND_ACCOUNT,
+        CR.FIELDS.PROMO_ACCOUNT,
+        CR.FIELDS.SHIPPING_ITEM,
+        CR.FIELDS.DISCOUNT_ITEM,
+        CR.FIELDS.TAX_ITEM,
+        CR.FIELDS.TAX_CODE
+    ];
+
+    // Map from field ID to config property name for lookup-only fields.
+    const LOOKUP_FIELD_MAP = {};
+    LOOKUP_FIELD_MAP[CR.FIELDS.SUBSIDIARY] = 'subsidiary';
+    LOOKUP_FIELD_MAP[CR.FIELDS.CUSTOMER] = 'customer';
+    LOOKUP_FIELD_MAP[CR.FIELDS.FBA_CUSTOMER] = 'fbaCustomer';
+    LOOKUP_FIELD_MAP[CR.FIELDS.B2B_CUSTOMER] = 'b2bCustomer';
+    LOOKUP_FIELD_MAP[CR.FIELDS.LOCATION] = 'location';
+    LOOKUP_FIELD_MAP[CR.FIELDS.FBA_LOCATION] = 'fbaLocation';
+    LOOKUP_FIELD_MAP[CR.FIELDS.SETTLE_ACCOUNT] = 'settleAccount';
+    LOOKUP_FIELD_MAP[CR.FIELDS.FEE_ACCOUNT] = 'feeAccount';
+    LOOKUP_FIELD_MAP[CR.FIELDS.FBA_FEE_ACCOUNT] = 'fbaFeeAccount';
+    LOOKUP_FIELD_MAP[CR.FIELDS.REFUND_ACCOUNT] = 'refundAccount';
+    LOOKUP_FIELD_MAP[CR.FIELDS.PROMO_ACCOUNT] = 'promoAccount';
+    LOOKUP_FIELD_MAP[CR.FIELDS.SHIPPING_ITEM] = 'shippingItem';
+    LOOKUP_FIELD_MAP[CR.FIELDS.DISCOUNT_ITEM] = 'discountItem';
+    LOOKUP_FIELD_MAP[CR.FIELDS.TAX_ITEM] = 'taxItem';
+    LOOKUP_FIELD_MAP[CR.FIELDS.TAX_CODE] = 'taxCode';
+
+    /**
+     * Extracts the value from a lookupFields result entry.
+     * lookupFields returns arrays for SELECT fields: [{value:'1',text:'Foo'}]
+     */
+    function extractLookupValue(val) {
+        if (!val) return null;
+        if (Array.isArray(val) && val.length > 0) return val[0].value || val[0];
+        return val;
+    }
+
     function getAllConfigs() {
         const configs = [];
-        // Subsidiary (SELECT → -117) is not searchable in non-OneWorld accounts,
-        // so exclude it from search columns and fetch it via lookupFields instead.
-        const unsearchableColumns = [CR.FIELDS.SUBSIDIARY];
         const searchColumns = Object.values(CR.FIELDS).filter(function (f) {
-            return unsearchableColumns.indexOf(f) === -1;
+            return LOOKUP_ONLY_FIELDS.indexOf(f) === -1;
         });
         search.create({
             type: CR.ID,
@@ -28,22 +75,18 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
             columns: searchColumns
         }).run().each(function (result) {
             const cfg = mapResultToConfig(result);
-            if (isOneWorld) {
-                try {
-                    var looked = search.lookupFields({
-                        type: CR.ID,
-                        id: result.id,
-                        columns: unsearchableColumns
-                    });
-                    cfg.subsidiary = looked[CR.FIELDS.SUBSIDIARY]
-                        ? (looked[CR.FIELDS.SUBSIDIARY][0]
-                            ? looked[CR.FIELDS.SUBSIDIARY][0].value
-                            : looked[CR.FIELDS.SUBSIDIARY])
-                        : null;
-                } catch (e) {
-                    log.debug({ title: 'getAllConfigs', details: 'Could not look up subsidiary for config ' + result.id + ': ' + e.message });
-                    cfg.subsidiary = null;
-                }
+            try {
+                var looked = search.lookupFields({
+                    type: CR.ID,
+                    id: result.id,
+                    columns: LOOKUP_ONLY_FIELDS
+                });
+                LOOKUP_ONLY_FIELDS.forEach(function (fieldId) {
+                    var prop = LOOKUP_FIELD_MAP[fieldId];
+                    if (prop) cfg[prop] = extractLookupValue(looked[fieldId]);
+                });
+            } catch (e) {
+                log.debug({ title: 'getAllConfigs', details: 'lookupFields error for config ' + result.id + ': ' + e.message });
             }
             configs.push(cfg);
             return true;
@@ -86,10 +129,10 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
             refreshToken: result.getValue(CR.FIELDS.REFRESH_TOKEN),
             endpoint: result.getValue(CR.FIELDS.ENDPOINT),
             marketplaceId: result.getValue(CR.FIELDS.MARKETPLACE_ID),
-            // NetSuite Mapping
+            // NetSuite Mapping (SELECT fields populated via lookupFields)
             subsidiary: null,
-            location: result.getValue(CR.FIELDS.LOCATION),
-            customer: result.getValue(CR.FIELDS.CUSTOMER),
+            location: null,
+            customer: null,
             paymentMethod: result.getValue(CR.FIELDS.PAYMENT_METHOD),
             // Sync Toggles
             orderEnabled: result.getValue(CR.FIELDS.ORDER_ENABLED),
@@ -110,25 +153,25 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
             orderType: result.getValue(CR.FIELDS.ORDER_TYPE),
             salesOrderForm: result.getValue(CR.FIELDS.SALES_ORDER_FORM),
             cashSaleForm: result.getValue(CR.FIELDS.CASH_SALE_FORM),
-            // Financial Accounts
-            settleAccount: result.getValue(CR.FIELDS.SETTLE_ACCOUNT),
-            feeAccount: result.getValue(CR.FIELDS.FEE_ACCOUNT),
-            fbaFeeAccount: result.getValue(CR.FIELDS.FBA_FEE_ACCOUNT),
-            refundAccount: result.getValue(CR.FIELDS.REFUND_ACCOUNT),
-            promoAccount: result.getValue(CR.FIELDS.PROMO_ACCOUNT),
-            shippingItem: result.getValue(CR.FIELDS.SHIPPING_ITEM),
-            discountItem: result.getValue(CR.FIELDS.DISCOUNT_ITEM),
+            // Financial Accounts (SELECT fields populated via lookupFields)
+            settleAccount: null,
+            feeAccount: null,
+            fbaFeeAccount: null,
+            refundAccount: null,
+            promoAccount: null,
+            shippingItem: null,
+            discountItem: null,
             // FBA Settings
             fbaEnabled: result.getValue(CR.FIELDS.FBA_ENABLED),
-            fbaLocation: result.getValue(CR.FIELDS.FBA_LOCATION),
-            fbaCustomer: result.getValue(CR.FIELDS.FBA_CUSTOMER),
-            b2bCustomer: result.getValue(CR.FIELDS.B2B_CUSTOMER),
+            fbaLocation: null,
+            fbaCustomer: null,
+            b2bCustomer: null,
             // Automation Flags
             autoCreditMemo: result.getValue(CR.FIELDS.AUTO_CREDIT_MEMO),
             autoDeposit: result.getValue(CR.FIELDS.AUTO_DEPOSIT),
-            // Tax
-            taxItem: result.getValue(CR.FIELDS.TAX_ITEM),
-            taxCode: result.getValue(CR.FIELDS.TAX_CODE),
+            // Tax (SELECT fields populated via lookupFields)
+            taxItem: null,
+            taxCode: null,
             // Error Retry
             maxRetries: parseInt(result.getValue(CR.FIELDS.MAX_RETRIES), 10) || 3,
             retryDelayMins: parseInt(result.getValue(CR.FIELDS.RETRY_DELAY_MINS), 10) || 30,

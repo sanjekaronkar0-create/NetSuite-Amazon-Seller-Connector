@@ -11,9 +11,10 @@ define([
     '../lib/constants',
     '../lib/configHelper',
     '../lib/logger',
+    '../lib/amazonClient',
     '../services/fbaInventoryService',
     '../services/notificationService'
-], function (runtime, log, constants, configHelper, logger, fbaInventoryService, notificationService) {
+], function (runtime, log, constants, configHelper, logger, amazonClient, fbaInventoryService, notificationService) {
 
     var CR = constants.CUSTOM_RECORDS.CONFIG;
 
@@ -59,13 +60,12 @@ define([
             }
 
             // Poll for report completion (up to 5 attempts)
-            var N_amazonClient = require('../lib/amazonClient');
             var attempts = 0;
             var maxAttempts = 5;
             var reportStatus;
 
             while (attempts < maxAttempts) {
-                reportStatus = N_amazonClient.getReport(config, reportId);
+                reportStatus = amazonClient.getReport(config, reportId);
                 if (reportStatus.processingStatus === 'DONE') break;
                 if (reportStatus.processingStatus === 'FATAL' || reportStatus.processingStatus === 'CANCELLED') {
                     logger.error(constants.LOG_TYPE.FBA_INVENTORY,

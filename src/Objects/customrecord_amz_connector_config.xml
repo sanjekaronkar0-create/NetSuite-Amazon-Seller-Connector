@@ -305,6 +305,15 @@
       <description>Customer record for FBA orders (if different from MFN customer)</description>
     </customrecordcustomfield>
 
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_b2b_customer">
+      <label>B2B Customer</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>-2</selectrecordtype>
+      <ismandatory>F</ismandatory>
+      <displaytype>NORMAL</displaytype>
+      <description>Customer record for Amazon B2B (Business) orders</description>
+    </customrecordcustomfield>
+
     <!-- Multi-Marketplace -->
 
     <customrecordcustomfield scriptid="custrecord_amz_cfg_addl_mkt_ids">
