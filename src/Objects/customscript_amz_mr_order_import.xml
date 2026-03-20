@@ -8,7 +8,7 @@
   <scriptcustomfields>
     <scriptcustomfield scriptid="custscript_amz_mr_order_data">
       <accesslevel>2</accesslevel>
-      <fieldtype>FREEFORMTEXT</fieldtype>
+      <fieldtype>TEXTAREA</fieldtype>
       <label>Order Data File ID</label>
       <storevalue>T</storevalue>
     </scriptcustomfield>
