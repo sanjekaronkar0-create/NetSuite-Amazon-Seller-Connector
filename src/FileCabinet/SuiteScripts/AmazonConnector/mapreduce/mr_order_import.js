@@ -46,8 +46,9 @@ define([
     }
 
     /**
-     * Map stage: Process each order individually.
-     * Fetches order items and maps to the reduce stage by order ID.
+     * Map stage: Filters orders and routes to reduce by order ID.
+     * Skips existing and pending orders. Does NOT make API calls
+     * to avoid statement count limits from busyWait rate limiting.
      */
     function map(context) {
         try {
@@ -79,15 +80,11 @@ define([
                 return;
             }
 
-            // Fetch order items from Amazon
-            const orderItems = amazonClient.getOrderItems(config, amazonOrder.AmazonOrderId);
-
             context.write({
                 key: amazonOrder.AmazonOrderId,
                 value: JSON.stringify({
                     configId: entry.configId,
-                    order: amazonOrder,
-                    items: orderItems.payload || orderItems
+                    order: amazonOrder
                 })
             });
 
@@ -107,7 +104,29 @@ define([
             const data = JSON.parse(context.values[0]);
             const config = configHelper.getConfig(data.configId);
             const amazonOrder = data.order;
-            const orderItems = data.items;
+
+            // Fetch order items from Amazon (moved from map stage to avoid
+            // statement count limits caused by busyWait in rate limiting)
+            let orderItems;
+            try {
+                const itemsResponse = amazonClient.getOrderItems(config, amazonOrderId);
+                orderItems = itemsResponse.payload || itemsResponse;
+            } catch (itemsErr) {
+                logger.error(constants.LOG_TYPE.ORDER_SYNC,
+                    'Failed to get order items for ' + amazonOrderId + ': ' + itemsErr.message, {
+                    configId: data.configId,
+                    amazonRef: amazonOrderId,
+                    details: itemsErr.stack
+                });
+                errorQueue.enqueue({
+                    type: constants.ERROR_QUEUE_TYPE.ORDER_CREATE,
+                    amazonRef: amazonOrderId,
+                    errorMsg: 'getOrderItems failed: ' + itemsErr.message,
+                    configId: data.configId,
+                    maxRetries: 3
+                });
+                return;
+            }
 
             // Try to get shipping address
             let address = null;

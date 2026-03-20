@@ -48,8 +48,15 @@ define(['N/https', 'N/log', './amazonAuth', './constants', './logger'],
      */
     function busyWait(ms) {
         var start = Date.now();
+        var iterations = 0;
+        // Cap iterations to stay under NetSuite script statement limits.
+        // Prevents governance errors when called from Map/Reduce stages.
+        var MAX_ITERATIONS = 200000;
         while (Date.now() - start < ms) {
-            // spin
+            iterations++;
+            if (iterations >= MAX_ITERATIONS) {
+                break;
+            }
         }
     }
 
@@ -127,24 +134,19 @@ define(['N/https', 'N/log', './amazonAuth', './constants', './logger'],
             response = executeRequest(method, url, token, options.body);
         }
 
-        // Handle 429 Too Many Requests - retry with exponential backoff
+        // Handle 429 Too Many Requests - fail fast and let the error queue retry.
+        // Previously used busyWait spin-loops (5-30s) which consumed excessive
+        // script statements and caused governance errors in Map/Reduce stages.
+        // The error queue retries with proper exponential backoff (30+ minutes),
+        // by which time Amazon's rate limits have genuinely reset.
         if (response.code === 429) {
             var rateLimitKey = getRateLimitKey(options.path);
-            for (var attempt = 0; attempt < RETRY_429_MAX_ATTEMPTS; attempt++) {
-                var delayMs = RETRY_429_DELAYS[attempt] || RETRY_429_DELAYS[RETRY_429_DELAYS.length - 1];
-                log.audit({
-                    title: 'SP-API 429 Retry',
-                    details: 'Rate limited on ' + options.path +
-                        '. Attempt ' + (attempt + 1) + '/' + RETRY_429_MAX_ATTEMPTS +
-                        ', waiting ' + delayMs + 'ms before retry'
-                });
-                busyWait(delayMs);
-                lastRequestTime[rateLimitKey] = Date.now();
-                response = executeRequest(method, url, token, options.body);
-                if (response.code !== 429) {
-                    break;
-                }
-            }
+            lastRequestTime[rateLimitKey] = Date.now();
+            log.audit({
+                title: 'SP-API 429 Rate Limited',
+                details: 'Rate limited on ' + options.path +
+                    '. Failing fast for error queue retry.'
+            });
         }
 
         if (response.code < 200 || response.code >= 300) {
