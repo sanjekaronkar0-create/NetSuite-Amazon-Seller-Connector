@@ -6,7 +6,7 @@
   <scriptcustomfields>
     <scriptcustomfield scriptid="custscript_amz_mr_settle_data">
       <accesslevel>2</accesslevel>
-      <fieldtype>FREEFORMTEXT</fieldtype>
+      <fieldtype>TEXTAREA</fieldtype>
       <label>Settlement Data File ID</label>
       <storevalue>T</storevalue>
     </scriptcustomfield>
