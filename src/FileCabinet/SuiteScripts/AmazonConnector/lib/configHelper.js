@@ -18,7 +18,7 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
         const configs = [];
         // Subsidiary (SELECT → -117) is not searchable in non-OneWorld accounts,
         // so exclude it from search columns and fetch it via lookupFields instead.
-        const unsearchableColumns = [CR.FIELDS.SUBSIDIARY];
+        const unsearchableColumns = [CR.FIELDS.SUBSIDIARY, CR.FIELDS.B2B_CUSTOMER];
         const searchColumns = Object.values(CR.FIELDS).filter(function (f) {
             return unsearchableColumns.indexOf(f) === -1;
         });
@@ -44,6 +44,21 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
                     log.debug({ title: 'getAllConfigs', details: 'Could not look up subsidiary for config ' + result.id + ': ' + e.message });
                     cfg.subsidiary = null;
                 }
+            }
+            try {
+                var b2bLookup = search.lookupFields({
+                    type: CR.ID,
+                    id: result.id,
+                    columns: [CR.FIELDS.B2B_CUSTOMER]
+                });
+                cfg.b2bCustomer = b2bLookup[CR.FIELDS.B2B_CUSTOMER]
+                    ? (b2bLookup[CR.FIELDS.B2B_CUSTOMER][0]
+                        ? b2bLookup[CR.FIELDS.B2B_CUSTOMER][0].value
+                        : b2bLookup[CR.FIELDS.B2B_CUSTOMER])
+                    : null;
+            } catch (e) {
+                log.debug({ title: 'getAllConfigs', details: 'Could not look up B2B customer for config ' + result.id + ': ' + e.message });
+                cfg.b2bCustomer = null;
             }
             configs.push(cfg);
             return true;
@@ -122,7 +137,7 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
             fbaEnabled: result.getValue(CR.FIELDS.FBA_ENABLED),
             fbaLocation: result.getValue(CR.FIELDS.FBA_LOCATION),
             fbaCustomer: result.getValue(CR.FIELDS.FBA_CUSTOMER),
-            b2bCustomer: result.getValue(CR.FIELDS.B2B_CUSTOMER),
+            b2bCustomer: null,
             // Automation Flags
             autoCreditMemo: result.getValue(CR.FIELDS.AUTO_CREDIT_MEMO),
             autoDeposit: result.getValue(CR.FIELDS.AUTO_DEPOSIT),
