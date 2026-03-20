@@ -35,6 +35,9 @@ define([
     function downloadListingsReport(config, reportDocumentId) {
         const docResponse = amazonClient.getReportDocument(config, reportDocumentId);
         const fileResponse = https.get({ url: docResponse.url });
+        if (fileResponse.code !== 200) {
+            throw new Error('Failed to download listings report: HTTP ' + fileResponse.code);
+        }
         return parseListingsReport(fileResponse.body);
     }
 

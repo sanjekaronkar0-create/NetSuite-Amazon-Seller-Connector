@@ -42,6 +42,9 @@ define([
             var docResponse = amazonClient.getReportDocument(config, resultDocumentId);
             var N_https = require('N/https');
             var fileResponse = N_https.get({ url: docResponse.url });
+            if (fileResponse.code !== 200) {
+                throw new Error('Failed to download feed result: HTTP ' + fileResponse.code);
+            }
             return parseFeedResult(fileResponse.body);
         } catch (e) {
             log.error({ title: 'Feed Result', details: 'Error getting feed result: ' + e.message });

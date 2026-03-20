@@ -18,13 +18,27 @@ define(['N/file', 'N/search', 'N/record', 'N/log'], function (file, search, reco
     function getTempFolderId() {
         if (_tempFolderId) return _tempFolderId;
 
-        // Try to find existing temp folder
+        // Find AmazonConnector folder first (cannot use dot notation joins on folder searches)
+        var acSearch = search.create({
+            type: 'folder',
+            filters: [['name', 'is', 'AmazonConnector']],
+            columns: ['internalid']
+        });
+
+        var acResults = acSearch.run().getRange({ start: 0, end: 1 });
+        if (acResults.length === 0) {
+            throw new Error('Cannot find AmazonConnector folder in File Cabinet');
+        }
+
+        var parentId = parseInt(acResults[0].id, 10);
+
+        // Try to find existing temp folder under AmazonConnector
         var folderSearch = search.create({
             type: 'folder',
             filters: [
                 ['name', 'is', 'temp'],
                 'AND',
-                ['parent.name', 'is', 'AmazonConnector']
+                ['parent', 'anyof', parentId]
             ],
             columns: ['internalid']
         });
@@ -34,24 +48,6 @@ define(['N/file', 'N/search', 'N/record', 'N/log'], function (file, search, reco
             _tempFolderId = parseInt(results[0].id, 10);
             return _tempFolderId;
         }
-
-        // Find parent AmazonConnector folder
-        var parentSearch = search.create({
-            type: 'folder',
-            filters: [
-                ['name', 'is', 'AmazonConnector'],
-                'AND',
-                ['parent.name', 'is', 'SuiteScripts']
-            ],
-            columns: ['internalid']
-        });
-
-        var parentResults = parentSearch.run().getRange({ start: 0, end: 1 });
-        if (parentResults.length === 0) {
-            throw new Error('Cannot find AmazonConnector folder in File Cabinet');
-        }
-
-        var parentId = parseInt(parentResults[0].id, 10);
 
         // Create temp folder
         var folder = record.create({ type: record.Type.FOLDER });

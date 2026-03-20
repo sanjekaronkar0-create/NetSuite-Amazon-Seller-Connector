@@ -127,11 +127,14 @@ define([
         const feedDocumentId = docResponse.feedDocumentId;
         const uploadUrl = docResponse.url;
 
-        https.put({
+        var uploadResponse = https.put({
             url: uploadUrl,
             headers: { 'Content-Type': 'text/xml; charset=UTF-8' },
             body: feedContent
         });
+        if (uploadResponse.code !== 200) {
+            throw new Error('Failed to upload pricing feed to S3: HTTP ' + uploadResponse.code);
+        }
 
         const feedResponse = amazonClient.createFeed(
             config,

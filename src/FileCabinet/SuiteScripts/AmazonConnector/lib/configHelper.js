@@ -122,6 +122,7 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
             fbaEnabled: result.getValue(CR.FIELDS.FBA_ENABLED),
             fbaLocation: result.getValue(CR.FIELDS.FBA_LOCATION),
             fbaCustomer: result.getValue(CR.FIELDS.FBA_CUSTOMER),
+            b2bCustomer: result.getValue(CR.FIELDS.B2B_CUSTOMER),
             // Automation Flags
             autoCreditMemo: result.getValue(CR.FIELDS.AUTO_CREDIT_MEMO),
             autoDeposit: result.getValue(CR.FIELDS.AUTO_DEPOSIT),
@@ -200,6 +201,7 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
             fbaEnabled: getValue(CR.FIELDS.FBA_ENABLED),
             fbaLocation: getValue(CR.FIELDS.FBA_LOCATION),
             fbaCustomer: getValue(CR.FIELDS.FBA_CUSTOMER),
+            b2bCustomer: getValue(CR.FIELDS.B2B_CUSTOMER),
             autoCreditMemo: getValue(CR.FIELDS.AUTO_CREDIT_MEMO),
             autoDeposit: getValue(CR.FIELDS.AUTO_DEPOSIT),
             taxItem: getValue(CR.FIELDS.TAX_ITEM),

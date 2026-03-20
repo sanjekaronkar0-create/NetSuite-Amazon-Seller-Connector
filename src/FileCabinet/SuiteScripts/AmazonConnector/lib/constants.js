@@ -53,6 +53,7 @@ define([], function () {
                 FBA_ENABLED: 'custrecord_amz_cfg_fba_enabled',
                 FBA_LOCATION: 'custrecord_amz_cfg_fba_location',
                 FBA_CUSTOMER: 'custrecord_amz_cfg_fba_customer',
+                B2B_CUSTOMER: 'custrecord_amz_cfg_b2b_customer',
                 // Multi-marketplace
                 ADDITIONAL_MARKETPLACE_IDS: 'custrecord_amz_cfg_addl_mkt_ids',
                 // Retry / Error Settings

@@ -191,11 +191,14 @@ define([
         var feedDocumentId = docResponse.feedDocumentId;
         var uploadUrl = docResponse.url;
 
-        https.put({
+        var uploadResponse = https.put({
             url: uploadUrl,
             headers: { 'Content-Type': 'text/xml; charset=UTF-8' },
             body: feedContent
         });
+        if (uploadResponse.code !== 200) {
+            throw new Error('Failed to upload product feed to S3: HTTP ' + uploadResponse.code);
+        }
 
         var feedResponse = amazonClient.createFeed(
             config,
