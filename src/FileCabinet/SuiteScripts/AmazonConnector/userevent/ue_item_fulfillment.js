@@ -89,13 +89,13 @@ define([
             // Queue for retry
             try {
                 errorQueue.enqueue({
-                    type: constants.ERROR_QUEUE_TYPE.FULFILLMENT,
+                    type: constants.ERROR_QUEUE_TYPE.FULFILLMENT_SEND,
                     configId: orderLink ? orderLink.configId : '',
                     amazonRef: orderLink ? orderLink.amazonOrderId : '',
-                    nsRecordType: 'itemfulfillment',
-                    nsRecordId: fulfillmentRec.id,
-                    errorMessage: e.message,
-                    errorDetails: e.stack
+                    recordType: 'itemfulfillment',
+                    recordId: fulfillmentRec.id,
+                    errorMsg: e.message,
+                    payload: e.stack
                 });
             } catch (qErr) {
                 log.error({ title: 'Error Queue', details: 'Failed to enqueue: ' + qErr.message });

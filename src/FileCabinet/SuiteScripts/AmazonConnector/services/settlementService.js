@@ -38,6 +38,9 @@ define([
         const downloadUrl = docResponse.url;
 
         const fileResponse = https.get({ url: downloadUrl });
+        if (fileResponse.code !== 200) {
+            throw new Error('Failed to download settlement report: HTTP ' + fileResponse.code);
+        }
         return parseSettlementData(fileResponse.body);
     }
 

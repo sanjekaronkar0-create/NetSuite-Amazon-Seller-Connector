@@ -128,11 +128,14 @@ define([
         const uploadUrl = docResponse.url;
 
         // Step 2: Upload feed content to S3
-        https.put({
+        var uploadResponse = https.put({
             url: uploadUrl,
             headers: { 'Content-Type': 'text/xml; charset=UTF-8' },
             body: feedContent
         });
+        if (uploadResponse.code !== 200) {
+            throw new Error('Failed to upload inventory feed to S3: HTTP ' + uploadResponse.code);
+        }
 
         // Step 3: Create feed
         const feedResponse = amazonClient.createFeed(

@@ -32,7 +32,11 @@ define([
         // Handle pagination
         var nextToken = payload.NextToken;
         while (nextToken) {
-            response = amazonClient.getOrders(config, null, nextToken);
+            response = amazonClient.get({
+                config: config,
+                path: '/orders/v0/orders',
+                params: { NextToken: nextToken, MarketplaceIds: config.marketplaceId }
+            });
             payload = response.payload || response;
             orders = payload.Orders || [];
             allOrders = allOrders.concat(orders.filter(function (o) {

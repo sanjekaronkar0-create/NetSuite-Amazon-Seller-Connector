@@ -35,6 +35,9 @@ define([
     function downloadFbaInventoryReport(config, reportDocumentId) {
         const docResponse = amazonClient.getReportDocument(config, reportDocumentId);
         const fileResponse = https.get({ url: docResponse.url });
+        if (fileResponse.code !== 200) {
+            throw new Error('Failed to download FBA inventory report: HTTP ' + fileResponse.code);
+        }
         return parseFbaInventoryReport(fileResponse.body);
     }
 
