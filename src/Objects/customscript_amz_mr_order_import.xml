@@ -5,6 +5,14 @@
   <isinactive>F</isinactive>
   <notifyadmins>T</notifyadmins>
   <notifyowner>T</notifyowner>
+  <scriptcustomfields>
+    <scriptcustomfield scriptid="custscript_amz_mr_order_data">
+      <accesslevel>2</accesslevel>
+      <fieldtype>FREEFORMTEXT</fieldtype>
+      <label>Order Data File ID</label>
+      <storevalue>T</storevalue>
+    </scriptcustomfield>
+  </scriptcustomfields>
   <scriptdeployments>
     <scriptdeployment scriptid="customdeploy_amz_mr_order_import">
       <status>NOTSCHEDULED</status>
