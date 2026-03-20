@@ -7,12 +7,13 @@
 define([
     'N/search',
     'N/record',
+    'N/https',
     'N/log',
     '../lib/constants',
     '../lib/amazonClient',
     '../lib/logger',
     '../lib/errorQueue'
-], function (search, record, log, constants, amazonClient, logger, errorQueue) {
+], function (search, record, https, log, constants, amazonClient, logger, errorQueue) {
 
     /**
      * Checks the status of a submitted feed.
@@ -40,8 +41,7 @@ define([
     function getFeedResult(config, resultDocumentId) {
         try {
             var docResponse = amazonClient.getReportDocument(config, resultDocumentId);
-            var N_https = require('N/https');
-            var fileResponse = N_https.get({ url: docResponse.url });
+            var fileResponse = https.get({ url: docResponse.url });
             if (fileResponse.code !== 200) {
                 throw new Error('Failed to download feed result: HTTP ' + fileResponse.code);
             }
