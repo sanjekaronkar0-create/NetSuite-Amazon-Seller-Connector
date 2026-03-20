@@ -123,6 +123,7 @@ define([
                     amazonRef: amazonOrderId,
                     errorMsg: 'getOrderItems failed: ' + itemsErr.message,
                     configId: data.configId,
+                    payload: JSON.stringify({ order: amazonOrder, needsItems: true }),
                     maxRetries: 3
                 });
                 return;

@@ -36,27 +36,15 @@ define(['N/https', 'N/log', './amazonAuth', './constants', './logger'],
     // Track last request time per endpoint for rate limiting
     const lastRequestTime = {};
 
-    // 429 retry configuration
-    const RETRY_429_MAX_ATTEMPTS = 3;
-    const RETRY_429_DELAYS = [5000, 15000, 30000]; // 5s, 15s, 30s exponential backoff
-
     /**
      * Blocks execution for the specified number of milliseconds using a busy-wait loop.
      * This is the only delay option in SuiteScript 2.x (no sleep/setTimeout).
-     * Does NOT consume governance units.
      * @param {number} ms - Milliseconds to wait
      */
     function busyWait(ms) {
         var start = Date.now();
-        var iterations = 0;
-        // Cap iterations to stay under NetSuite script statement limits.
-        // Prevents governance errors when called from Map/Reduce stages.
-        var MAX_ITERATIONS = 200000;
         while (Date.now() - start < ms) {
-            iterations++;
-            if (iterations >= MAX_ITERATIONS) {
-                break;
-            }
+            // spin
         }
     }
 

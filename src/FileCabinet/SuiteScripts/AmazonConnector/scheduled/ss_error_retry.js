@@ -13,13 +13,14 @@ define([
     '../lib/configHelper',
     '../lib/errorQueue',
     '../lib/logger',
+    '../lib/amazonClient',
     '../services/orderService',
     '../services/returnService',
     '../services/financialService',
     '../services/fulfillmentService',
     '../services/pricingService',
     '../services/notificationService'
-], function (runtime, log, search, constants, configHelper, errorQueue, logger,
+], function (runtime, log, search, constants, configHelper, errorQueue, logger, amazonClient,
     orderService, returnService, financialService, fulfillmentService, pricingService, notificationService) {
 
     function execute(context) {
@@ -123,7 +124,15 @@ define([
         const existing = orderService.findExistingOrderMap(payload.order.AmazonOrderId);
         if (existing) return true; // Already processed
 
-        const result = orderService.createSalesOrder(config, payload.order, payload.items);
+        // If items were not fetched (e.g. getOrderItems failed in reduce stage),
+        // fetch them now from Amazon before creating the Sales Order.
+        var items = payload.items;
+        if (!items || payload.needsItems) {
+            var itemsResponse = amazonClient.getOrderItems(config, payload.order.AmazonOrderId);
+            items = itemsResponse.payload || itemsResponse;
+        }
+
+        const result = orderService.createSalesOrder(config, payload.order, items);
         return !!result.salesOrderId;
     }
 
