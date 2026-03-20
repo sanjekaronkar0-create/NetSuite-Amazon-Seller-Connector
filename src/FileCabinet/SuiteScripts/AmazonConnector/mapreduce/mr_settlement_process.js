@@ -12,13 +12,15 @@ define([
     '../lib/configHelper',
     '../lib/errorQueue',
     '../lib/logger',
+    '../lib/mrDataHelper',
     '../services/settlementService',
     '../services/financialService'
-], function (runtime, log, constants, configHelper, errorQueue, logger,
+], function (runtime, log, constants, configHelper, errorQueue, logger, mrDataHelper,
     settlementService, financialService) {
 
     /**
      * Input stage: gets settlement records pending reconciliation.
+     * Parameter contains a File Cabinet file ID when triggered by scheduled script.
      */
     function getInputData() {
         const dataParam = runtime.getCurrentScript().getParameter({
@@ -26,7 +28,7 @@ define([
         });
 
         if (dataParam) {
-            return JSON.parse(dataParam);
+            return mrDataHelper.readDataFile(dataParam);
         }
 
         // If no explicit data, find all unreconciled settlements

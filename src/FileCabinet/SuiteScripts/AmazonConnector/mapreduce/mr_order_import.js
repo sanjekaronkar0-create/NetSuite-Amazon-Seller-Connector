@@ -13,11 +13,13 @@ define([
     '../lib/amazonClient',
     '../lib/logger',
     '../lib/errorQueue',
+    '../lib/mrDataHelper',
     '../services/orderService'
-], function (runtime, log, constants, configHelper, amazonClient, logger, errorQueue, orderService) {
+], function (runtime, log, constants, configHelper, amazonClient, logger, errorQueue, mrDataHelper, orderService) {
 
     /**
      * Input stage: Returns the order data passed from the scheduled script.
+     * The parameter contains a File Cabinet file ID pointing to a JSON file.
      */
     function getInputData() {
         const dataParam = runtime.getCurrentScript().getParameter({
@@ -29,7 +31,7 @@ define([
             return [];
         }
 
-        const data = JSON.parse(dataParam);
+        var data = mrDataHelper.readDataFile(dataParam);
         log.audit({
             title: 'MR Order Import - Input',
             details: 'Processing ' + data.orders.length + ' orders for config ' + data.configId
@@ -156,17 +158,25 @@ define([
      * Summarize stage: Log results.
      */
     function summarize(summary) {
-        log.audit({
-            title: 'MR Order Import - Summary',
-            details: 'Input: ' + summary.inputSummary.error +
-                ' | Map errors: ' + summary.mapSummary.errors.iterator().size +
-                ' | Reduce errors: ' + summary.reduceSummary.errors.iterator().size
+        var mapErrorCount = 0;
+        summary.mapSummary.errors.iterator().each(function () {
+            mapErrorCount++;
+            return true;
         });
 
+        var reduceErrorCount = 0;
         summary.reduceSummary.errors.iterator().each(function (key, error) {
+            reduceErrorCount++;
             logger.error(constants.LOG_TYPE.ORDER_SYNC,
                 'Reduce error for ' + key + ': ' + error, { amazonRef: key });
             return true;
+        });
+
+        log.audit({
+            title: 'MR Order Import - Summary',
+            details: 'Input: ' + (summary.inputSummary.error || 'none') +
+                ' | Map errors: ' + mapErrorCount +
+                ' | Reduce errors: ' + reduceErrorCount
         });
     }
 

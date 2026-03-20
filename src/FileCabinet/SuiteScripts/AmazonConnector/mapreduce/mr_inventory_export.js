@@ -127,15 +127,17 @@ define([
      * Summarize stage.
      */
     function summarize(summary) {
-        log.audit({
-            title: 'MR Inventory Export - Summary',
-            details: 'Completed. Reduce errors: ' + summary.reduceSummary.errors.iterator().size
-        });
-
+        var reduceErrorCount = 0;
         summary.reduceSummary.errors.iterator().each(function (key, error) {
+            reduceErrorCount++;
             logger.error(constants.LOG_TYPE.INVENTORY_SYNC,
                 'Inventory reduce error for config ' + key + ': ' + error);
             return true;
+        });
+
+        log.audit({
+            title: 'MR Inventory Export - Summary',
+            details: 'Completed. Reduce errors: ' + reduceErrorCount
         });
     }
 

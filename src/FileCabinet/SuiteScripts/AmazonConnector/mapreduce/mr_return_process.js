@@ -12,13 +12,14 @@ define([
     '../lib/configHelper',
     '../lib/errorQueue',
     '../lib/logger',
+    '../lib/mrDataHelper',
     '../services/returnService',
     '../services/financialService'
-], function (runtime, log, constants, configHelper, errorQueue, logger,
+], function (runtime, log, constants, configHelper, errorQueue, logger, mrDataHelper,
     returnService, financialService) {
 
     /**
-     * Input stage: receives return data from scheduled script parameter.
+     * Input stage: receives return data from scheduled script via File Cabinet file.
      */
     function getInputData() {
         const dataParam = runtime.getCurrentScript().getParameter({
@@ -30,7 +31,7 @@ define([
             return [];
         }
 
-        const data = JSON.parse(dataParam);
+        var data = mrDataHelper.readDataFile(dataParam);
         log.audit({
             title: 'MR Return Process - Input',
             details: 'Processing ' + data.returns.length + ' returns for config ' + data.configId
