@@ -10,14 +10,16 @@ define([
     'N/search',
     'N/log',
     '../lib/constants',
-    '../lib/logger'
-], function (record, search, log, constants, logger) {
+    '../lib/logger',
+    '../lib/configHelper'
+], function (record, search, log, constants, logger, configHelper) {
 
     /**
      * Resolves a NetSuite customer from Amazon buyer data.
-     * Strategy: config default → find by email → find by name → create new
+     * Strategy: marketplace override → B2B → FBA → find by email → find by name → create new → default
+     * When marketplace-specific config exists, its customer settings take precedence.
      * @param {Object} config - Connector config
-     * @param {Object} amazonOrder - Amazon order with BuyerInfo
+     * @param {Object} amazonOrder - Amazon order with BuyerInfo and MarketplaceId
      * @param {Object} [options] - Options { useDefault: true, createIfMissing: true }
      * @returns {string|number} NetSuite customer internal ID
      */
@@ -26,14 +28,20 @@ define([
         var isFBA = amazonOrder.FulfillmentChannel === 'AFN';
         var isB2B = amazonOrder.IsBusinessOrder === true || amazonOrder.IsBusinessOrder === 'true';
 
+        // Resolve marketplace-specific settings (overrides config customer/fba/b2b)
+        var effectiveConfig = config;
+        if (amazonOrder.MarketplaceId) {
+            effectiveConfig = configHelper.resolveMarketplaceSettings(config, amazonOrder.MarketplaceId);
+        }
+
         // B2B routing: use dedicated B2B customer if configured
-        if (isB2B && config.b2bCustomer) {
-            return config.b2bCustomer;
+        if (isB2B && effectiveConfig.b2bCustomer) {
+            return effectiveConfig.b2bCustomer;
         }
 
         // FBA routing: use FBA customer if configured
-        if (isFBA && config.fbaCustomer) {
-            return config.fbaCustomer;
+        if (isFBA && effectiveConfig.fbaCustomer) {
+            return effectiveConfig.fbaCustomer;
         }
 
         // Extract buyer info
@@ -61,12 +69,12 @@ define([
             return createCustomerFromOrder(config, amazonOrder);
         }
 
-        // Fallback to default Amazon customer
-        if (options.useDefault && config.customer) {
-            return config.customer;
+        // Fallback to default Amazon customer (marketplace-specific or global)
+        if (options.useDefault && effectiveConfig.customer) {
+            return effectiveConfig.customer;
         }
 
-        return config.customer;
+        return effectiveConfig.customer || config.customer;
     }
 
     /**

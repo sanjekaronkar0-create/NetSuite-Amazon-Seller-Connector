@@ -487,5 +487,23 @@
       <description>Action to take on cancelled orders: CLOSE or VOID</description>
     </customrecordcustomfield>
 
+    <!-- Column-Item Mapping Usage Scope -->
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_col_map_orders">
+      <label>Use Column Mapping for Orders</label>
+      <fieldtype>CHECKBOX</fieldtype>
+      <defaultvalue>F</defaultvalue>
+      <displaytype>NORMAL</displaytype>
+      <description>When enabled, uses column-to-item mapping records for order line items (shipping, tax, fees)</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cfg_col_map_settle">
+      <label>Use Column Mapping for Settlements</label>
+      <fieldtype>CHECKBOX</fieldtype>
+      <defaultvalue>F</defaultvalue>
+      <displaytype>NORMAL</displaytype>
+      <description>When enabled, uses column-to-item mapping records for settlement processing and journal entries</description>
+    </customrecordcustomfield>
+
   </customrecordcustomfields>
 </customrecordtype>

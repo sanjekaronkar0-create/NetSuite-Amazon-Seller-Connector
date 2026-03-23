@@ -1,0 +1,60 @@
+<customrecordtype scriptid="customrecord_amz_column_item_map">
+  <recordname>Amazon Column Item Mapping</recordname>
+  <includename>F</includename>
+  <isinactive>F</isinactive>
+  <allowinlinemassupdate>T</allowinlinemassupdate>
+  <allowquickadd>T</allowquickadd>
+  <allowquicksearch>T</allowquicksearch>
+  <allowuiaccess>T</allowuiaccess>
+  <description>Maps Amazon settlement/order column names to NetSuite items. Used for settlement journal entries and optionally for order line items.</description>
+  <enablenumbering>F</enablenumbering>
+  <enableoptimisticlocking>T</enableoptimisticlocking>
+  <enablesystemnotestream>T</enablesystemnotestream>
+  <iconbuiltin>T</iconbuiltin>
+  <iconindex>18</iconindex>
+  <customrecordcustomfields>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cim_column_name">
+      <label>Amazon Column Name</label>
+      <fieldtype>CLOBTEXT</fieldtype>
+      <ismandatory>T</ismandatory>
+      <displaytype>NORMAL</displaytype>
+      <description>Column name from Amazon data (e.g., product sales tax, shipping credits, fba fees)</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cim_item">
+      <label>NetSuite Item</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>-10</selectrecordtype>
+      <ismandatory>T</ismandatory>
+      <displaytype>NORMAL</displaytype>
+      <description>NetSuite item to use when this column appears in Amazon data</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cim_use_in_orders">
+      <label>Use in Orders</label>
+      <fieldtype>CHECKBOX</fieldtype>
+      <defaultvalue>F</defaultvalue>
+      <displaytype>NORMAL</displaytype>
+      <description>Use this column-item mapping when creating Sales Orders/Cash Sales</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cim_use_in_settle">
+      <label>Use in Settlements</label>
+      <fieldtype>CHECKBOX</fieldtype>
+      <defaultvalue>T</defaultvalue>
+      <displaytype>NORMAL</displaytype>
+      <description>Use this column-item mapping when processing settlement reports and creating journal entries</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_cim_config">
+      <label>Configuration</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>[scriptid=customrecord_amz_connector_config]</selectrecordtype>
+      <ismandatory>T</ismandatory>
+      <displaytype>NORMAL</displaytype>
+      <description>Parent connector configuration record</description>
+    </customrecordcustomfield>
+
+  </customrecordcustomfields>
+</customrecordtype>
