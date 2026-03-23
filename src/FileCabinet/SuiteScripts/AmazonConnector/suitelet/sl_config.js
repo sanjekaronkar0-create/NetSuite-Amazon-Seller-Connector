@@ -248,6 +248,7 @@ define([
      */
     function populateOrderStats(sublist) {
         const OM = CR.ORDER_MAP;
+        let line = 0;
 
         search.create({
             type: OM.ID,
@@ -262,15 +263,16 @@ define([
                     summary: search.Summary.COUNT
                 })
             ]
-        }).run().each(function (result, idx) {
+        }).run().each(function (result) {
             sublist.setSublistValue({
-                id: 'custpage_stat_status', line: idx,
+                id: 'custpage_stat_status', line: line,
                 value: result.getText({ name: OM.FIELDS.STATUS, summary: search.Summary.GROUP }) || '-'
             });
             sublist.setSublistValue({
-                id: 'custpage_stat_count', line: idx,
+                id: 'custpage_stat_count', line: line,
                 value: result.getValue({ name: 'internalid', summary: search.Summary.COUNT }) || '0'
             });
+            line++;
             return true;
         });
     }
