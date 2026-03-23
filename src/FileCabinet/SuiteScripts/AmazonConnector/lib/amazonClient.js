@@ -164,7 +164,12 @@ define(['N/https', 'N/log', './amazonAuth', './constants', './logger'],
             configId: config.configId
         });
 
-        return JSON.parse(response.body);
+        var parsed = JSON.parse(response.body);
+        log.debug({
+            title: 'SP-API Response: ' + options.path,
+            details: JSON.stringify(parsed).substring(0, 3999)
+        });
+        return parsed;
     }
 
     /**

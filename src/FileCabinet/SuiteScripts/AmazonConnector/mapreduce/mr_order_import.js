@@ -105,12 +105,21 @@ define([
             const config = configHelper.getConfig(data.configId);
             const amazonOrder = data.order;
 
+            log.debug({
+                title: 'Order Data: ' + amazonOrderId,
+                details: JSON.stringify(amazonOrder).substring(0, 3999)
+            });
+
             // Fetch order items from Amazon (moved from map stage to avoid
             // statement count limits caused by busyWait in rate limiting)
             let orderItems;
             try {
                 const itemsResponse = amazonClient.getOrderItems(config, amazonOrderId);
                 orderItems = itemsResponse.payload || itemsResponse;
+                log.debug({
+                    title: 'Order Items: ' + amazonOrderId,
+                    details: JSON.stringify(orderItems).substring(0, 3999)
+                });
             } catch (itemsErr) {
                 logger.error(constants.LOG_TYPE.ORDER_SYNC,
                     'Failed to get order items for ' + amazonOrderId + ': ' + itemsErr.message, {
@@ -133,6 +142,10 @@ define([
             try {
                 const addrResponse = amazonClient.getOrderAddress(config, amazonOrderId);
                 address = (addrResponse.payload || addrResponse).ShippingAddress;
+                log.debug({
+                    title: 'Shipping Address: ' + amazonOrderId,
+                    details: JSON.stringify(address)
+                });
             } catch (addrErr) {
                 log.debug({
                     title: 'MR Order Import',
