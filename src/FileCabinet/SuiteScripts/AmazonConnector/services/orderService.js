@@ -78,6 +78,23 @@ define([
             details: 'Fetched ' + allOrders.length + ' orders across ' + pageCount + ' pages'
         });
 
+        log.debug({
+            title: 'Fetched Orders Data',
+            details: JSON.stringify(allOrders.map(function (o) {
+                return {
+                    AmazonOrderId: o.AmazonOrderId,
+                    OrderStatus: o.OrderStatus,
+                    PurchaseDate: o.PurchaseDate,
+                    OrderTotal: o.OrderTotal,
+                    FulfillmentChannel: o.FulfillmentChannel,
+                    MarketplaceId: o.MarketplaceId,
+                    IsBusinessOrder: o.IsBusinessOrder,
+                    NumberOfItemsShipped: o.NumberOfItemsShipped,
+                    NumberOfItemsUnshipped: o.NumberOfItemsUnshipped
+                };
+            })).substring(0, 3999)
+        });
+
         return allOrders;
     }
 
@@ -154,6 +171,21 @@ define([
      * @returns {Object} Result with salesOrderId/cashSaleId and orderMapId
      */
     function createSalesOrder(config, amazonOrder, orderItems) {
+        log.debug({
+            title: 'createSalesOrder Input: ' + amazonOrder.AmazonOrderId,
+            details: JSON.stringify({
+                AmazonOrderId: amazonOrder.AmazonOrderId,
+                OrderStatus: amazonOrder.OrderStatus,
+                FulfillmentChannel: amazonOrder.FulfillmentChannel,
+                MarketplaceId: amazonOrder.MarketplaceId,
+                OrderTotal: amazonOrder.OrderTotal,
+                IsBusinessOrder: amazonOrder.IsBusinessOrder,
+                ShippingAddress: amazonOrder.ShippingAddress,
+                BuyerInfo: amazonOrder.BuyerInfo,
+                itemCount: (orderItems.OrderItems || orderItems).length
+            }).substring(0, 3999)
+        });
+
         // Resolve marketplace-specific settings (customer, location, subsidiary, tax, etc.)
         const effectiveConfig = amazonOrder.MarketplaceId
             ? configHelper.resolveMarketplaceSettings(config, amazonOrder.MarketplaceId)
@@ -178,6 +210,20 @@ define([
             createIfMissing: true
         });
         const location = isFBA && effectiveConfig.fbaLocation ? effectiveConfig.fbaLocation : effectiveConfig.location;
+
+        log.debug({
+            title: 'Order Config: ' + amazonOrder.AmazonOrderId,
+            details: JSON.stringify({
+                customer: customer,
+                location: location,
+                isFBA: isFBA,
+                isB2B: isB2B,
+                useCashSale: useCashSale,
+                subsidiary: effectiveConfig.subsidiary,
+                taxCode: effectiveConfig.taxCode,
+                paymentMethod: effectiveConfig.paymentMethod
+            })
+        });
 
         if (customer) txn.setValue({ fieldId: 'entity', value: customer });
         if (effectiveConfig.subsidiary) txn.setValue({ fieldId: 'subsidiary', value: effectiveConfig.subsidiary });
@@ -233,6 +279,16 @@ define([
 
         for (const item of items) {
             const nsItemId = resolveNetSuiteItem(item.SellerSKU, effectiveConfig.configId);
+            log.debug({
+                title: 'SKU Resolution: ' + item.SellerSKU,
+                details: JSON.stringify({
+                    sku: item.SellerSKU,
+                    nsItemId: nsItemId,
+                    qty: item.QuantityOrdered,
+                    price: item.ItemPrice,
+                    title: (item.Title || '').substring(0, 100)
+                })
+            });
             if (!nsItemId) {
                 logger.warn(constants.LOG_TYPE.ORDER_SYNC,
                     'SKU not mapped: ' + item.SellerSKU + ' for order ' + amazonOrder.AmazonOrderId, {
