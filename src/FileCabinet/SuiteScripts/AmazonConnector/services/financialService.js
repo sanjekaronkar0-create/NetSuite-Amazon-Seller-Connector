@@ -9,8 +9,9 @@ define([
     'N/search',
     'N/log',
     '../lib/constants',
-    '../lib/logger'
-], function (record, search, log, constants, logger) {
+    '../lib/logger',
+    '../lib/configHelper'
+], function (record, search, log, constants, logger, configHelper) {
 
     const STL = constants.CUSTOM_RECORDS.SETTLEMENT;
 
@@ -77,13 +78,15 @@ define([
 
     /**
      * Creates a Journal Entry to record Amazon fees from a settlement.
-     * Debits fee expense accounts and credits the settlement clearing account.
+     * When column-item mappings are enabled, creates granular lines per column name
+     * using the configured items. Otherwise falls back to account-based fee lines.
      * @param {Object} config
      * @param {Object} settlement
      * @param {Object} summary
+     * @param {Object} [columnAmounts] - Per-column amounts from settlement parsing
      * @returns {number} Journal Entry ID
      */
-    function createFeeJournalEntry(config, settlement, summary) {
+    function createFeeJournalEntry(config, settlement, summary, columnAmounts) {
         const je = record.create({
             type: record.Type.JOURNAL_ENTRY,
             isDynamic: true
@@ -102,45 +105,91 @@ define([
         });
 
         let lineIdx = 0;
+        let totalDebits = 0;
 
-        // Selling Fees (debit expense account)
-        if (summary.sellingFees && config.feeAccount) {
-            je.selectNewLine({ sublistId: 'line' });
-            je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'account', value: config.feeAccount });
-            je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'debit', value: Math.abs(summary.sellingFees) });
-            je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'memo', value: 'Amazon Selling Fees' });
-            je.commitLine({ sublistId: 'line' });
-            lineIdx++;
+        // Check if column-item mapping is enabled for settlements
+        var useColumnMapping = config.colMapSettle === true || config.colMapSettle === 'T';
+        var columnItemMap = null;
+
+        if (useColumnMapping && columnAmounts) {
+            columnItemMap = configHelper.getColumnItemMap(config.configId, { useInSettle: true });
         }
 
-        // FBA Fees (debit FBA expense account)
-        if (summary.fbaFees && config.fbaFeeAccount) {
-            je.selectNewLine({ sublistId: 'line' });
-            je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'account', value: config.fbaFeeAccount });
-            je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'debit', value: Math.abs(summary.fbaFees) });
-            je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'memo', value: 'Amazon FBA Fees' });
-            je.commitLine({ sublistId: 'line' });
-            lineIdx++;
-        }
+        if (columnItemMap && Object.keys(columnItemMap).length > 0 && columnAmounts) {
+            // Use column-item mappings for granular JE lines
+            for (var colName in columnAmounts) {
+                if (!columnAmounts.hasOwnProperty(colName)) continue;
+                var amount = columnAmounts[colName];
+                if (amount === 0) continue;
 
-        // Promo Rebates (debit promo expense account)
-        if (summary.promoRebates && config.promoAccount) {
-            je.selectNewLine({ sublistId: 'line' });
-            je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'account', value: config.promoAccount });
-            je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'debit', value: Math.abs(summary.promoRebates) });
-            je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'memo', value: 'Amazon Promotional Rebates' });
-            je.commitLine({ sublistId: 'line' });
-            lineIdx++;
-        }
+                var itemId = columnItemMap[colName];
+                if (!itemId) continue;
 
-        // Other Fees
-        if (summary.otherFees && config.feeAccount) {
-            je.selectNewLine({ sublistId: 'line' });
-            je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'account', value: config.feeAccount });
-            je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'debit', value: Math.abs(summary.otherFees) });
-            je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'memo', value: 'Amazon Other Fees' });
-            je.commitLine({ sublistId: 'line' });
-            lineIdx++;
+                // Look up the item's expense/income account for the JE line
+                var itemAccount = getItemAccount(itemId);
+                if (!itemAccount && config.feeAccount) {
+                    itemAccount = config.feeAccount;
+                }
+                if (!itemAccount) continue;
+
+                var absAmount = Math.abs(amount);
+                je.selectNewLine({ sublistId: 'line' });
+                je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'account', value: itemAccount });
+                if (amount < 0) {
+                    je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'debit', value: absAmount });
+                } else {
+                    je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'credit', value: absAmount });
+                }
+                je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'memo', value: 'Amazon: ' + colName });
+                je.commitLine({ sublistId: 'line' });
+                lineIdx++;
+                totalDebits += amount < 0 ? absAmount : -absAmount;
+            }
+        } else {
+            // Fallback: account-based fee lines (original behavior)
+
+            // Selling Fees (debit expense account)
+            if (summary.sellingFees && config.feeAccount) {
+                je.selectNewLine({ sublistId: 'line' });
+                je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'account', value: config.feeAccount });
+                je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'debit', value: Math.abs(summary.sellingFees) });
+                je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'memo', value: 'Amazon Selling Fees' });
+                je.commitLine({ sublistId: 'line' });
+                lineIdx++;
+            }
+
+            // FBA Fees (debit FBA expense account)
+            if (summary.fbaFees && config.fbaFeeAccount) {
+                je.selectNewLine({ sublistId: 'line' });
+                je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'account', value: config.fbaFeeAccount });
+                je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'debit', value: Math.abs(summary.fbaFees) });
+                je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'memo', value: 'Amazon FBA Fees' });
+                je.commitLine({ sublistId: 'line' });
+                lineIdx++;
+            }
+
+            // Promo Rebates (debit promo expense account)
+            if (summary.promoRebates && config.promoAccount) {
+                je.selectNewLine({ sublistId: 'line' });
+                je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'account', value: config.promoAccount });
+                je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'debit', value: Math.abs(summary.promoRebates) });
+                je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'memo', value: 'Amazon Promotional Rebates' });
+                je.commitLine({ sublistId: 'line' });
+                lineIdx++;
+            }
+
+            // Other Fees
+            if (summary.otherFees && config.feeAccount) {
+                je.selectNewLine({ sublistId: 'line' });
+                je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'account', value: config.feeAccount });
+                je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'debit', value: Math.abs(summary.otherFees) });
+                je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'memo', value: 'Amazon Other Fees' });
+                je.commitLine({ sublistId: 'line' });
+                lineIdx++;
+            }
+
+            totalDebits = Math.abs(summary.sellingFees || 0) + Math.abs(summary.fbaFees || 0) +
+                Math.abs(summary.promoRebates || 0) + Math.abs(summary.otherFees || 0);
         }
 
         // If no fee lines, skip JE creation
@@ -149,13 +198,11 @@ define([
             return null;
         }
 
-        // Credit line: settlement/clearing account
-        const totalDebits = Math.abs(summary.sellingFees || 0) + Math.abs(summary.fbaFees || 0) +
-            Math.abs(summary.promoRebates || 0) + Math.abs(summary.otherFees || 0);
-
+        // Credit line: settlement/clearing account (balancing entry)
+        var balancingAmount = Math.abs(totalDebits);
         je.selectNewLine({ sublistId: 'line' });
         je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'account', value: config.settleAccount });
-        je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'credit', value: totalDebits });
+        je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'credit', value: balancingAmount });
         je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'memo', value: 'Amazon Settlement Clearing' });
         je.commitLine({ sublistId: 'line' });
 
@@ -170,6 +217,29 @@ define([
         });
 
         return jeId;
+    }
+
+    /**
+     * Looks up the expense or income account for a NetSuite item.
+     * @param {string|number} itemId
+     * @returns {string|null} Account internal ID
+     */
+    function getItemAccount(itemId) {
+        if (!itemId) return null;
+        try {
+            var looked = search.lookupFields({
+                type: 'item',
+                id: itemId,
+                columns: ['expenseaccount', 'incomeaccount']
+            });
+            var expAcct = looked.expenseaccount;
+            if (Array.isArray(expAcct) && expAcct.length > 0) return expAcct[0].value;
+            var incAcct = looked.incomeaccount;
+            if (Array.isArray(incAcct) && incAcct.length > 0) return incAcct[0].value;
+        } catch (e) {
+            log.debug({ title: 'getItemAccount', details: 'Could not look up account for item ' + itemId + ': ' + e.message });
+        }
+        return null;
     }
 
     /**

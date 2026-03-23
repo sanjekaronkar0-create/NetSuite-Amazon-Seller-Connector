@@ -51,7 +51,7 @@ define([
      */
     function parseSettlementData(rawData) {
         const lines = rawData.split('\n');
-        if (lines.length < 2) return { rows: [], summary: {} };
+        if (lines.length < 2) return { rows: [], summary: {}, columnAmounts: {} };
 
         const headers = lines[0].split('\t').map(h => h.trim());
         const rows = [];
@@ -65,6 +65,8 @@ define([
             refunds: 0,
             totalAmount: 0
         };
+        // Track amounts per column name for column-item mapping
+        const columnAmounts = {};
 
         for (let i = 1; i < lines.length; i++) {
             if (!lines[i].trim()) continue;
@@ -77,9 +79,10 @@ define([
             rows.push(row);
 
             categorizeAmount(row, summary);
+            trackColumnAmount(row, columnAmounts);
         }
 
-        return { rows, summary };
+        return { rows, summary, columnAmounts };
     }
 
     /**
@@ -106,6 +109,26 @@ define([
         }
 
         summary.totalAmount += amount;
+    }
+
+    /**
+     * Tracks settlement row amounts by their column/amount-description name.
+     * This allows column-to-item mappings to create granular journal entry lines.
+     * @param {Object} row - Parsed settlement row
+     * @param {Object} columnAmounts - Map of column name to accumulated amount
+     */
+    function trackColumnAmount(row, columnAmounts) {
+        const amount = parseFloat(row['amount'] || row['total'] || 0);
+        if (amount === 0) return;
+
+        // Use the amount-description or description field as the column key
+        var colName = (row['amount-description'] || row['description'] || row['amount-type'] || row['type'] || '').toLowerCase().trim();
+        if (!colName) return;
+
+        if (!columnAmounts[colName]) {
+            columnAmounts[colName] = 0;
+        }
+        columnAmounts[colName] += amount;
     }
 
     /**

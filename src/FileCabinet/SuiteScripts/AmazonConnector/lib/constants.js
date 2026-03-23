@@ -85,7 +85,10 @@ define([], function () {
                 FBA_INV_SYNC_ENABLED: 'custrecord_amz_cfg_fba_inv_sync',
                 // Order Cancellation
                 CANCEL_SYNC_ENABLED: 'custrecord_amz_cfg_cancel_enabled',
-                CANCEL_ACTION: 'custrecord_amz_cfg_cancel_action'
+                CANCEL_ACTION: 'custrecord_amz_cfg_cancel_action',
+                // Column-Item Mapping Usage Scope
+                COL_MAP_ORDERS: 'custrecord_amz_cfg_col_map_orders',
+                COL_MAP_SETTLE: 'custrecord_amz_cfg_col_map_settle'
             }
         },
         LOG: {
@@ -178,6 +181,33 @@ define([], function () {
                 ORDER_MAP: 'custrecord_amz_ret_order_map',
                 CONFIG: 'custrecord_amz_ret_config',
                 DATE: 'custrecord_amz_ret_date'
+            }
+        },
+        COLUMN_ITEM_MAP: {
+            ID: 'customrecord_amz_column_item_map',
+            FIELDS: {
+                COLUMN_NAME: 'custrecord_amz_cim_column_name',
+                ITEM: 'custrecord_amz_cim_item',
+                USE_IN_ORDERS: 'custrecord_amz_cim_use_in_orders',
+                USE_IN_SETTLE: 'custrecord_amz_cim_use_in_settle',
+                CONFIG: 'custrecord_amz_cim_config'
+            }
+        },
+        MARKETPLACE_CFG: {
+            ID: 'customrecord_amz_marketplace_cfg',
+            FIELDS: {
+                MARKETPLACE_ID: 'custrecord_amz_mkt_marketplace_id',
+                MARKETPLACE_NAME: 'custrecord_amz_mkt_marketplace_name',
+                CUSTOMER: 'custrecord_amz_mkt_customer',
+                FBA_CUSTOMER: 'custrecord_amz_mkt_fba_customer',
+                B2B_CUSTOMER: 'custrecord_amz_mkt_b2b_customer',
+                SUBSIDIARY: 'custrecord_amz_mkt_subsidiary',
+                LOCATION: 'custrecord_amz_mkt_location',
+                FBA_LOCATION: 'custrecord_amz_mkt_fba_location',
+                PAYMENT_METHOD: 'custrecord_amz_mkt_payment_method',
+                TAX_ITEM: 'custrecord_amz_mkt_tax_item',
+                TAX_CODE: 'custrecord_amz_mkt_tax_code',
+                CONFIG: 'custrecord_amz_mkt_config'
             }
         },
         ERROR_QUEUE: {

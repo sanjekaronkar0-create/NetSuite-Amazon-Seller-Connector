@@ -8,6 +8,8 @@
 define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (search, record, log, runtime, constants) {
 
     const CR = constants.CUSTOM_RECORDS.CONFIG;
+    const CIM = constants.CUSTOM_RECORDS.COLUMN_ITEM_MAP;
+    const MKT = constants.CUSTOM_RECORDS.MARKETPLACE_CFG;
     const isOneWorld = runtime.isFeatureInEffect({ feature: 'SUBSIDIARIES' });
 
     /**
@@ -194,7 +196,10 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
             fbaInvSyncEnabled: result.getValue(CR.FIELDS.FBA_INV_SYNC_ENABLED),
             // Cancellation
             cancelSyncEnabled: result.getValue(CR.FIELDS.CANCEL_SYNC_ENABLED),
-            cancelAction: result.getValue(CR.FIELDS.CANCEL_ACTION) || 'close'
+            cancelAction: result.getValue(CR.FIELDS.CANCEL_ACTION) || 'close',
+            // Column-Item Mapping Usage Scope
+            colMapOrders: result.getValue(CR.FIELDS.COL_MAP_ORDERS),
+            colMapSettle: result.getValue(CR.FIELDS.COL_MAP_SETTLE)
         };
     }
 
@@ -269,13 +274,209 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
             fbaInvSyncEnabled: getValue(CR.FIELDS.FBA_INV_SYNC_ENABLED),
             // Cancellation
             cancelSyncEnabled: getValue(CR.FIELDS.CANCEL_SYNC_ENABLED),
-            cancelAction: getValue(CR.FIELDS.CANCEL_ACTION) || 'close'
+            cancelAction: getValue(CR.FIELDS.CANCEL_ACTION) || 'close',
+            // Column-Item Mapping Usage Scope
+            colMapOrders: getValue(CR.FIELDS.COL_MAP_ORDERS),
+            colMapSettle: getValue(CR.FIELDS.COL_MAP_SETTLE)
         };
+    }
+
+    /**
+     * Loads all column-to-item mappings for a given config.
+     * @param {string|number} configId
+     * @param {Object} [options] - { useInOrders: boolean, useInSettle: boolean }
+     * @returns {Array<Object>} Array of { columnName, itemId, useInOrders, useInSettle }
+     */
+    function getColumnItemMappings(configId, options) {
+        var mappings = [];
+        var filters = [[CIM.FIELDS.CONFIG, 'anyof', configId]];
+
+        if (options && options.useInOrders) {
+            filters.push('AND');
+            filters.push([CIM.FIELDS.USE_IN_ORDERS, 'is', 'T']);
+        }
+        if (options && options.useInSettle) {
+            filters.push('AND');
+            filters.push([CIM.FIELDS.USE_IN_SETTLE, 'is', 'T']);
+        }
+
+        search.create({
+            type: CIM.ID,
+            filters: filters,
+            columns: [CIM.FIELDS.COLUMN_NAME, CIM.FIELDS.USE_IN_ORDERS, CIM.FIELDS.USE_IN_SETTLE]
+        }).run().each(function (result) {
+            var itemVal = null;
+            try {
+                var looked = search.lookupFields({
+                    type: CIM.ID,
+                    id: result.id,
+                    columns: [CIM.FIELDS.ITEM]
+                });
+                itemVal = extractLookupValue(looked[CIM.FIELDS.ITEM]);
+            } catch (e) {
+                log.debug({ title: 'getColumnItemMappings', details: 'lookupFields error: ' + e.message });
+            }
+
+            mappings.push({
+                id: result.id,
+                columnName: (result.getValue(CIM.FIELDS.COLUMN_NAME) || '').toLowerCase().trim(),
+                itemId: itemVal,
+                useInOrders: result.getValue(CIM.FIELDS.USE_IN_ORDERS) === true || result.getValue(CIM.FIELDS.USE_IN_ORDERS) === 'T',
+                useInSettle: result.getValue(CIM.FIELDS.USE_IN_SETTLE) === true || result.getValue(CIM.FIELDS.USE_IN_SETTLE) === 'T'
+            });
+            return true;
+        });
+
+        return mappings;
+    }
+
+    /**
+     * Builds a lookup map from column name to item ID.
+     * @param {string|number} configId
+     * @param {Object} [options] - { useInOrders: boolean, useInSettle: boolean }
+     * @returns {Object} Map of lowercase column name to item internal ID
+     */
+    function getColumnItemMap(configId, options) {
+        var mappings = getColumnItemMappings(configId, options);
+        var map = {};
+        mappings.forEach(function (m) {
+            if (m.columnName && m.itemId) {
+                map[m.columnName] = m.itemId;
+            }
+        });
+        return map;
+    }
+
+    /**
+     * Loads all marketplace-specific configurations for a given config.
+     * @param {string|number} configId
+     * @returns {Array<Object>} Array of marketplace config objects
+     */
+    function getMarketplaceConfigs(configId) {
+        var mktConfigs = [];
+        var lookupFields = [
+            MKT.FIELDS.CUSTOMER,
+            MKT.FIELDS.FBA_CUSTOMER,
+            MKT.FIELDS.B2B_CUSTOMER,
+            MKT.FIELDS.SUBSIDIARY,
+            MKT.FIELDS.LOCATION,
+            MKT.FIELDS.FBA_LOCATION,
+            MKT.FIELDS.TAX_ITEM,
+            MKT.FIELDS.TAX_CODE
+        ];
+
+        search.create({
+            type: MKT.ID,
+            filters: [
+                [MKT.FIELDS.CONFIG, 'anyof', configId],
+                'AND',
+                ['isinactive', 'is', 'F']
+            ],
+            columns: [MKT.FIELDS.MARKETPLACE_ID, MKT.FIELDS.MARKETPLACE_NAME, MKT.FIELDS.PAYMENT_METHOD]
+        }).run().each(function (result) {
+            var mktCfg = {
+                id: result.id,
+                marketplaceId: (result.getValue(MKT.FIELDS.MARKETPLACE_ID) || '').trim(),
+                marketplaceName: result.getValue(MKT.FIELDS.MARKETPLACE_NAME) || '',
+                paymentMethod: result.getValue(MKT.FIELDS.PAYMENT_METHOD),
+                customer: null,
+                fbaCustomer: null,
+                b2bCustomer: null,
+                subsidiary: null,
+                location: null,
+                fbaLocation: null,
+                taxItem: null,
+                taxCode: null
+            };
+
+            try {
+                var looked = search.lookupFields({
+                    type: MKT.ID,
+                    id: result.id,
+                    columns: lookupFields
+                });
+                mktCfg.customer = extractLookupValue(looked[MKT.FIELDS.CUSTOMER]);
+                mktCfg.fbaCustomer = extractLookupValue(looked[MKT.FIELDS.FBA_CUSTOMER]);
+                mktCfg.b2bCustomer = extractLookupValue(looked[MKT.FIELDS.B2B_CUSTOMER]);
+                mktCfg.subsidiary = extractLookupValue(looked[MKT.FIELDS.SUBSIDIARY]);
+                mktCfg.location = extractLookupValue(looked[MKT.FIELDS.LOCATION]);
+                mktCfg.fbaLocation = extractLookupValue(looked[MKT.FIELDS.FBA_LOCATION]);
+                mktCfg.taxItem = extractLookupValue(looked[MKT.FIELDS.TAX_ITEM]);
+                mktCfg.taxCode = extractLookupValue(looked[MKT.FIELDS.TAX_CODE]);
+            } catch (e) {
+                log.debug({ title: 'getMarketplaceConfigs', details: 'lookupFields error: ' + e.message });
+            }
+
+            mktConfigs.push(mktCfg);
+            return true;
+        });
+
+        return mktConfigs;
+    }
+
+    /**
+     * Gets marketplace-specific configuration for a given marketplace ID.
+     * Falls back to parent config values if no marketplace config is found.
+     * @param {string|number} configId
+     * @param {string} marketplaceId
+     * @returns {Object|null} Marketplace config or null
+     */
+    function getMarketplaceConfig(configId, marketplaceId) {
+        if (!marketplaceId) return null;
+        var mktConfigs = getMarketplaceConfigs(configId);
+        for (var i = 0; i < mktConfigs.length; i++) {
+            if (mktConfigs[i].marketplaceId === marketplaceId) {
+                return mktConfigs[i];
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Resolves effective config values by merging marketplace-specific settings
+     * over the base config. Marketplace settings take precedence when present.
+     * @param {Object} config - Base connector config
+     * @param {string} marketplaceId - Amazon marketplace ID from order
+     * @returns {Object} Merged config with marketplace overrides applied
+     */
+    function resolveMarketplaceSettings(config, marketplaceId) {
+        if (!marketplaceId) return config;
+
+        var mktCfg = getMarketplaceConfig(config.configId, marketplaceId);
+        if (!mktCfg) return config;
+
+        // Create a shallow copy and overlay marketplace-specific values
+        var resolved = {};
+        for (var key in config) {
+            if (config.hasOwnProperty(key)) {
+                resolved[key] = config[key];
+            }
+        }
+
+        if (mktCfg.customer) resolved.customer = mktCfg.customer;
+        if (mktCfg.fbaCustomer) resolved.fbaCustomer = mktCfg.fbaCustomer;
+        if (mktCfg.b2bCustomer) resolved.b2bCustomer = mktCfg.b2bCustomer;
+        if (mktCfg.subsidiary) resolved.subsidiary = mktCfg.subsidiary;
+        if (mktCfg.location) resolved.location = mktCfg.location;
+        if (mktCfg.fbaLocation) resolved.fbaLocation = mktCfg.fbaLocation;
+        if (mktCfg.paymentMethod) resolved.paymentMethod = mktCfg.paymentMethod;
+        if (mktCfg.taxItem) resolved.taxItem = mktCfg.taxItem;
+        if (mktCfg.taxCode) resolved.taxCode = mktCfg.taxCode;
+
+        // Store the marketplace config ID for reference
+        resolved._marketplaceConfigId = mktCfg.id;
+
+        return resolved;
     }
 
     return {
         getAllConfigs,
         getConfig,
-        updateLastSync
+        updateLastSync,
+        getColumnItemMappings,
+        getColumnItemMap,
+        getMarketplaceConfigs,
+        getMarketplaceConfig,
+        resolveMarketplaceSettings
     };
 });

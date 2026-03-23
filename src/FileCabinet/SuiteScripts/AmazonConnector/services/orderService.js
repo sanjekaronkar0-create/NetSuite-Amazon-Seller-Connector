@@ -14,8 +14,9 @@ define([
     '../lib/amazonClient',
     '../lib/logger',
     '../lib/errorQueue',
+    '../lib/configHelper',
     './customerService'
-], function (record, search, runtime, log, constants, amazonClient, logger, errorQueue, customerService) {
+], function (record, search, runtime, log, constants, amazonClient, logger, errorQueue, configHelper, customerService) {
 
     const OM = constants.CUSTOM_RECORDS.ORDER_MAP;
     const IM = constants.CUSTOM_RECORDS.ITEM_MAP;
@@ -153,29 +154,40 @@ define([
      * @returns {Object} Result with salesOrderId/cashSaleId and orderMapId
      */
     function createSalesOrder(config, amazonOrder, orderItems) {
-        const useCashSale = config.orderType === constants.ORDER_TYPE.CASH_SALE;
+        // Resolve marketplace-specific settings (customer, location, subsidiary, tax, etc.)
+        const effectiveConfig = amazonOrder.MarketplaceId
+            ? configHelper.resolveMarketplaceSettings(config, amazonOrder.MarketplaceId)
+            : config;
+
+        const useCashSale = effectiveConfig.orderType === constants.ORDER_TYPE.CASH_SALE;
         const isFBA = amazonOrder.FulfillmentChannel === 'AFN';
         const isB2B = amazonOrder.IsBusinessOrder === true || amazonOrder.IsBusinessOrder === 'true';
+
+        // Load column-item mappings if enabled for orders
+        var columnItemMap = null;
+        if (effectiveConfig.colMapOrders === true || effectiveConfig.colMapOrders === 'T') {
+            columnItemMap = configHelper.getColumnItemMap(effectiveConfig.configId, { useInOrders: true });
+        }
 
         const recType = useCashSale ? record.Type.CASH_SALE : record.Type.SALES_ORDER;
         const txn = record.create({ type: recType, isDynamic: true });
 
-        // Resolve customer: B2B → FBA → email lookup → create new → default
-        const customer = customerService.resolveCustomer(config, amazonOrder, {
+        // Resolve customer: marketplace → B2B → FBA → email lookup → create new → default
+        const customer = customerService.resolveCustomer(effectiveConfig, amazonOrder, {
             useDefault: true,
             createIfMissing: true
         });
-        const location = isFBA && config.fbaLocation ? config.fbaLocation : config.location;
+        const location = isFBA && effectiveConfig.fbaLocation ? effectiveConfig.fbaLocation : effectiveConfig.location;
 
         if (customer) txn.setValue({ fieldId: 'entity', value: customer });
-        if (config.subsidiary) txn.setValue({ fieldId: 'subsidiary', value: config.subsidiary });
+        if (effectiveConfig.subsidiary) txn.setValue({ fieldId: 'subsidiary', value: effectiveConfig.subsidiary });
         if (location) txn.setValue({ fieldId: 'location', value: location });
 
         // Set custom form if configured
-        if (useCashSale && config.cashSaleForm) {
-            txn.setValue({ fieldId: 'customform', value: config.cashSaleForm });
-        } else if (!useCashSale && config.salesOrderForm) {
-            txn.setValue({ fieldId: 'customform', value: config.salesOrderForm });
+        if (useCashSale && effectiveConfig.cashSaleForm) {
+            txn.setValue({ fieldId: 'customform', value: effectiveConfig.cashSaleForm });
+        } else if (!useCashSale && effectiveConfig.salesOrderForm) {
+            txn.setValue({ fieldId: 'customform', value: effectiveConfig.salesOrderForm });
         }
 
         txn.setValue({ fieldId: 'otherrefnum', value: amazonOrder.AmazonOrderId });
@@ -206,8 +218,8 @@ define([
             txn.setValue({ fieldId: 'trandate', value: new Date(amazonOrder.PurchaseDate) });
         }
 
-        if (useCashSale && config.paymentMethod) {
-            txn.setValue({ fieldId: 'paymentmethod', value: config.paymentMethod });
+        if (useCashSale && effectiveConfig.paymentMethod) {
+            txn.setValue({ fieldId: 'paymentmethod', value: effectiveConfig.paymentMethod });
         }
 
         // Set shipping address
@@ -220,11 +232,11 @@ define([
         let hasItems = false;
 
         for (const item of items) {
-            const nsItemId = resolveNetSuiteItem(item.SellerSKU, config.configId);
+            const nsItemId = resolveNetSuiteItem(item.SellerSKU, effectiveConfig.configId);
             if (!nsItemId) {
                 logger.warn(constants.LOG_TYPE.ORDER_SYNC,
                     'SKU not mapped: ' + item.SellerSKU + ' for order ' + amazonOrder.AmazonOrderId, {
-                    configId: config.configId,
+                    configId: effectiveConfig.configId,
                     amazonRef: amazonOrder.AmazonOrderId
                 });
                 continue;
@@ -253,20 +265,25 @@ define([
             if (location) {
                 txn.setCurrentSublistValue({ sublistId: 'item', fieldId: 'location', value: location });
             }
-            if (config.taxCode) {
-                txn.setCurrentSublistValue({ sublistId: 'item', fieldId: 'taxcode', value: config.taxCode });
+            if (effectiveConfig.taxCode) {
+                txn.setCurrentSublistValue({ sublistId: 'item', fieldId: 'taxcode', value: effectiveConfig.taxCode });
             }
 
             txn.commitLine({ sublistId: 'item' });
             hasItems = true;
         }
 
-        // Add shipping charge line
-        if (config.shippingItem) {
+        // Add column-mapped line items (e.g., product sales tax, shipping credits, gift wrap, etc.)
+        if (columnItemMap) {
+            hasItems = addColumnMappedLines(txn, columnItemMap, items, location, effectiveConfig) || hasItems;
+        }
+
+        // Add shipping charge line (fallback if no column mapping for shipping)
+        if (effectiveConfig.shippingItem && !(columnItemMap && columnItemMap['shipping credits'])) {
             const shippingTotal = calculateShippingTotal(items);
             if (shippingTotal > 0) {
                 txn.selectNewLine({ sublistId: 'item' });
-                txn.setCurrentSublistValue({ sublistId: 'item', fieldId: 'item', value: config.shippingItem });
+                txn.setCurrentSublistValue({ sublistId: 'item', fieldId: 'item', value: effectiveConfig.shippingItem });
                 txn.setCurrentSublistValue({ sublistId: 'item', fieldId: 'quantity', value: 1 });
                 txn.setCurrentSublistValue({ sublistId: 'item', fieldId: 'rate', value: shippingTotal });
                 txn.commitLine({ sublistId: 'item' });
@@ -274,12 +291,12 @@ define([
             }
         }
 
-        // Add promotion discount line
-        if (config.discountItem) {
+        // Add promotion discount line (fallback if no column mapping for promos)
+        if (effectiveConfig.discountItem && !(columnItemMap && columnItemMap['promotional rebates'])) {
             const promoTotal = calculatePromoTotal(items);
             if (promoTotal > 0) {
                 txn.selectNewLine({ sublistId: 'item' });
-                txn.setCurrentSublistValue({ sublistId: 'item', fieldId: 'item', value: config.discountItem });
+                txn.setCurrentSublistValue({ sublistId: 'item', fieldId: 'item', value: effectiveConfig.discountItem });
                 txn.setCurrentSublistValue({ sublistId: 'item', fieldId: 'quantity', value: 1 });
                 txn.setCurrentSublistValue({ sublistId: 'item', fieldId: 'rate', value: -promoTotal });
                 txn.commitLine({ sublistId: 'item' });
@@ -291,7 +308,7 @@ define([
         }
 
         const txnId = txn.save({ ignoreMandatoryFields: true });
-        const orderMapId = createOrderMapRecord(config, amazonOrder, txnId, useCashSale);
+        const orderMapId = createOrderMapRecord(effectiveConfig, amazonOrder, txnId, useCashSale);
 
         const result = { orderMapId };
         if (useCashSale) {
@@ -300,6 +317,65 @@ define([
             result.salesOrderId = txnId;
         }
         return result;
+    }
+
+    /**
+     * Adds line items to a transaction based on column-to-item mappings.
+     * Extracts amounts from order item fields that match mapped column names.
+     * @param {Object} txn - NetSuite transaction record
+     * @param {Object} columnItemMap - Map of lowercase column name to item internal ID
+     * @param {Array} items - Amazon order items
+     * @param {string|number} location - Location ID
+     * @param {Object} config - Effective config
+     * @returns {boolean} True if any lines were added
+     */
+    function addColumnMappedLines(txn, columnItemMap, items, location, config) {
+        var addedAny = false;
+
+        // Aggregate amounts by column name across all order items
+        var columnAmounts = {};
+
+        for (var i = 0; i < items.length; i++) {
+            var item = items[i];
+
+            // Map Amazon order item fields to column names
+            var fieldMappings = {
+                'product sales tax': item.ItemTax ? parseFloat(item.ItemTax.Amount || 0) : 0,
+                'shipping credits': item.ShippingPrice ? parseFloat(item.ShippingPrice.Amount || 0) : 0,
+                'shipping credits tax': item.ShippingTax ? parseFloat(item.ShippingTax.Amount || 0) : 0,
+                'gift wrap credits': item.GiftWrapPrice ? parseFloat(item.GiftWrapPrice.Amount || 0) : 0,
+                'giftwrap credits tax': item.GiftWrapTax ? parseFloat(item.GiftWrapTax.Amount || 0) : 0,
+                'promotional rebates': item.PromotionDiscount ? -Math.abs(parseFloat(item.PromotionDiscount.Amount || 0)) : 0,
+                'promotional rebates tax': item.PromotionDiscountTax ? -Math.abs(parseFloat(item.PromotionDiscountTax.Amount || 0)) : 0
+            };
+
+            for (var colName in fieldMappings) {
+                if (fieldMappings.hasOwnProperty(colName) && columnItemMap[colName] && fieldMappings[colName] !== 0) {
+                    columnAmounts[colName] = (columnAmounts[colName] || 0) + fieldMappings[colName];
+                }
+            }
+        }
+
+        // Add a line for each column that has a non-zero amount and a mapped item
+        for (var col in columnAmounts) {
+            if (columnAmounts.hasOwnProperty(col) && columnAmounts[col] !== 0 && columnItemMap[col]) {
+                txn.selectNewLine({ sublistId: 'item' });
+                txn.setCurrentSublistValue({ sublistId: 'item', fieldId: 'item', value: columnItemMap[col] });
+                txn.setCurrentSublistValue({ sublistId: 'item', fieldId: 'quantity', value: 1 });
+                txn.setCurrentSublistValue({ sublistId: 'item', fieldId: 'rate', value: columnAmounts[col] });
+                txn.setCurrentSublistValue({ sublistId: 'item', fieldId: 'description', value: col });
+                if (location) {
+                    txn.setCurrentSublistValue({ sublistId: 'item', fieldId: 'location', value: location });
+                }
+                if (config.taxCode) {
+                    txn.setCurrentSublistValue({ sublistId: 'item', fieldId: 'taxcode', value: config.taxCode });
+                }
+                txn.commitLine({ sublistId: 'item' });
+                addedAny = true;
+            }
+        }
+
+        return addedAny;
     }
 
     /**
