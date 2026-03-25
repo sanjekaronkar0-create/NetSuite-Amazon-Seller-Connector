@@ -124,7 +124,7 @@ define([
         if (existing) return true; // Already processed
 
         const result = orderService.createSalesOrder(config, payload.order, payload.items);
-        return !!result.salesOrderId;
+        return !!(result.salesOrderId || result.cashSaleId || result.invoiceId);
     }
 
     function retryFulfillmentSend(config, payload) {
@@ -140,11 +140,18 @@ define([
             return true;
         }
 
-        const orderLink = returnService.getLinkedSalesOrder(payload.returnData.amazonOrderId);
+        const orderLink = returnService.getLinkedOrder(payload.returnData.amazonOrderId);
         if (!orderLink) return false;
 
-        const rmaId = returnService.createReturnAuthorization(config, payload.returnData, orderLink.salesOrderId);
-        returnService.createReturnMapRecord(config, payload.returnData, rmaId, orderLink.orderMapId);
+        if (orderLink.invoiceId) {
+            // Invoice: create Credit Memo directly
+            const cmId = returnService.createCreditMemoFromInvoice(config, payload.returnData, orderLink.invoiceId);
+            const mapId = returnService.createReturnMapRecord(config, payload.returnData, null, orderLink.orderMapId);
+            returnService.updateReturnCreditMemo(mapId, cmId);
+        } else {
+            const rmaId = returnService.createReturnAuthorization(config, payload.returnData, orderLink.salesOrderId);
+            returnService.createReturnMapRecord(config, payload.returnData, rmaId, orderLink.orderMapId);
+        }
         return true;
     }
 

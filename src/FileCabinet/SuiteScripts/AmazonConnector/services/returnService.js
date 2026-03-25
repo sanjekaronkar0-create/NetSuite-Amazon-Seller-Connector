@@ -2,7 +2,8 @@
  * @NApiVersion 2.1
  * @NModuleScope Public
  * @description Service module for Amazon Returns/Refunds processing.
- *              Creates NetSuite Return Authorizations and Credit Memos from Amazon return data.
+ *              Creates NetSuite Return Authorizations (from Sales Orders) or Credit Memos
+ *              (from Invoices) from Amazon return data.
  */
 define([
     'N/record',
@@ -53,27 +54,35 @@ define([
     }
 
     /**
-     * Gets the NetSuite sales order linked to an Amazon order.
+     * Gets the NetSuite transaction (Sales Order or Invoice) linked to an Amazon order.
      * @param {string} amazonOrderId
-     * @returns {Object|null} Order mapping with NS sales order ID
+     * @returns {Object|null} Order mapping with NS sales order or invoice ID
      */
-    function getLinkedSalesOrder(amazonOrderId) {
+    function getLinkedOrder(amazonOrderId) {
         let result = null;
 
         search.create({
             type: OM.ID,
             filters: [[OM.FIELDS.ORDER_ID, 'is', amazonOrderId]],
-            columns: [OM.FIELDS.NS_SALES_ORDER, OM.FIELDS.CONFIG]
+            columns: [OM.FIELDS.NS_SALES_ORDER, OM.FIELDS.NS_INVOICE, OM.FIELDS.CONFIG]
         }).run().each(function (r) {
             result = {
                 orderMapId: r.id,
                 salesOrderId: r.getValue(OM.FIELDS.NS_SALES_ORDER),
+                invoiceId: r.getValue(OM.FIELDS.NS_INVOICE),
                 configId: r.getValue(OM.FIELDS.CONFIG)
             };
             return false;
         });
 
         return result;
+    }
+
+    /**
+     * Backwards-compatible alias for getLinkedOrder.
+     */
+    function getLinkedSalesOrder(amazonOrderId) {
+        return getLinkedOrder(amazonOrderId);
     }
 
     /**
@@ -172,6 +181,56 @@ define([
     }
 
     /**
+     * Creates a Credit Memo directly from an Invoice for Amazon returns.
+     * Used when the order was created as an Invoice (not a Sales Order).
+     * @param {Object} config
+     * @param {Object} returnData - Amazon return info
+     * @param {string} invoiceId - NS Invoice internal ID
+     * @returns {number} Credit Memo ID
+     */
+    function createCreditMemoFromInvoice(config, returnData, invoiceId) {
+        const cm = record.transform({
+            fromType: record.Type.INVOICE,
+            fromId: invoiceId,
+            toType: record.Type.CREDIT_MEMO,
+            isDynamic: true
+        });
+
+        cm.setValue({
+            fieldId: 'memo',
+            value: 'Amazon Return: ' + (returnData.returnId || returnData.amazonOrderId)
+        });
+
+        // Zero out lines not being returned, set correct quantities for returned items
+        const lineCount = cm.getLineCount({ sublistId: 'item' });
+        for (let i = lineCount - 1; i >= 0; i--) {
+            cm.selectLine({ sublistId: 'item', line: i });
+
+            if (returnData.returnedSkus && returnData.returnedSkus.length > 0) {
+                const sku = cm.getCurrentSublistText({ sublistId: 'item', fieldId: 'item' });
+                const matchedReturn = returnData.returnedSkus.find(s => s.sku === sku);
+
+                if (matchedReturn) {
+                    cm.setCurrentSublistValue({
+                        sublistId: 'item',
+                        fieldId: 'quantity',
+                        value: matchedReturn.quantity || 1
+                    });
+                } else {
+                    cm.setCurrentSublistValue({
+                        sublistId: 'item',
+                        fieldId: 'quantity',
+                        value: 0
+                    });
+                }
+                cm.commitLine({ sublistId: 'item' });
+            }
+        }
+
+        return cm.save({ ignoreMandatoryFields: true });
+    }
+
+    /**
      * Updates a return mapping record with a credit memo reference.
      * @param {number} returnMapId
      * @param {number} creditMemoId
@@ -190,8 +249,10 @@ define([
     return {
         requestReturnsReport,
         isReturnProcessed,
+        getLinkedOrder,
         getLinkedSalesOrder,
         createReturnAuthorization,
+        createCreditMemoFromInvoice,
         createReturnMapRecord,
         updateReturnStatus,
         updateReturnCreditMemo

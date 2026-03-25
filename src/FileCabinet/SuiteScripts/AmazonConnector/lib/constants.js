@@ -65,6 +65,7 @@ define([], function () {
                 // Custom Form
                 SALES_ORDER_FORM: 'custrecord_amz_cfg_so_form',
                 CASH_SALE_FORM: 'custrecord_amz_cfg_cs_form',
+                INVOICE_FORM: 'custrecord_amz_cfg_inv_form',
                 // Tax Handling
                 TAX_ITEM: 'custrecord_amz_cfg_tax_item',
                 TAX_CODE: 'custrecord_amz_cfg_tax_code',
@@ -271,7 +272,8 @@ define([], function () {
 
     const ORDER_TYPE = {
         SALES_ORDER: '1',
-        CASH_SALE: '2'
+        CASH_SALE: '2',
+        INVOICE: '3'
     };
 
     const FULFILLMENT_CHANNEL = {

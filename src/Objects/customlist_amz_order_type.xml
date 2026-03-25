@@ -9,5 +9,8 @@
     <customvalue scriptid="custrecord_amz_cfg_ot_2">
       <value>Cash Sale</value>
     </customvalue>
+    <customvalue scriptid="custrecord_amz_cfg_ot_3">
+      <value>Invoice</value>
+    </customvalue>
   </customvalues>
 </customlist>

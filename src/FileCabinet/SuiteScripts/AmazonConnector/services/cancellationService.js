@@ -3,7 +3,7 @@
  * @NModuleScope Public
  * @description Service module for Amazon Order Cancellation handling.
  *              Detects canceled Amazon orders and closes/voids corresponding
- *              NetSuite Sales Orders or Cash Sales.
+ *              NetSuite Sales Orders, Cash Sales, or Invoices.
  */
 define([
     'N/record',
@@ -63,12 +63,13 @@ define([
         search.create({
             type: OM.ID,
             filters: [[OM.FIELDS.ORDER_ID, 'is', amazonOrderId]],
-            columns: [OM.FIELDS.NS_SALES_ORDER, OM.FIELDS.NS_CASH_SALE, OM.FIELDS.STATUS]
+            columns: [OM.FIELDS.NS_SALES_ORDER, OM.FIELDS.NS_CASH_SALE, OM.FIELDS.NS_INVOICE, OM.FIELDS.STATUS]
         }).run().each(function (result) {
             existing = {
                 id: result.id,
                 nsSOId: result.getValue(OM.FIELDS.NS_SALES_ORDER),
                 nsCashSaleId: result.getValue(OM.FIELDS.NS_CASH_SALE),
+                nsInvoiceId: result.getValue(OM.FIELDS.NS_INVOICE),
                 status: result.getValue(OM.FIELDS.STATUS)
             };
             return false;
@@ -84,12 +85,19 @@ define([
         }
 
         var cancelAction = config.cancelAction || 'close';
-        var nsRecordId = existing.nsSOId || existing.nsCashSaleId;
-        var recType = existing.nsSOId ? record.Type.SALES_ORDER : record.Type.CASH_SALE;
+        var nsRecordId = existing.nsSOId || existing.nsCashSaleId || existing.nsInvoiceId;
+        var recType = existing.nsSOId ? record.Type.SALES_ORDER
+            : existing.nsCashSaleId ? record.Type.CASH_SALE
+            : record.Type.INVOICE;
 
         try {
             if (cancelAction === 'close') {
-                closeSalesOrder(recType, nsRecordId);
+                if (existing.nsInvoiceId) {
+                    // Invoices cannot be closed like SOs — void/delete instead
+                    record.delete({ type: record.Type.INVOICE, id: nsRecordId });
+                } else {
+                    closeSalesOrder(recType, nsRecordId);
+                }
             }
             // Note: 'void' option not available for all transaction types in NS
 

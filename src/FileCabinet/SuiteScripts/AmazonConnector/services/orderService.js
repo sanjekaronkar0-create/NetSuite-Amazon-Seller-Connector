@@ -2,7 +2,7 @@
  * @NApiVersion 2.1
  * @NModuleScope Public
  * @description Service module for Amazon Order operations.
- *              Handles creating/updating NetSuite Sales Orders and Cash Sales from Amazon orders.
+ *              Handles creating/updating NetSuite Sales Orders, Cash Sales, and Invoices from Amazon orders.
  *              Supports MFN (merchant fulfilled) and AFN (FBA) fulfillment channels.
  */
 define([
@@ -106,12 +106,13 @@ define([
         search.create({
             type: OM.ID,
             filters: [[OM.FIELDS.ORDER_ID, 'is', amazonOrderId]],
-            columns: [OM.FIELDS.NS_SALES_ORDER, OM.FIELDS.NS_CASH_SALE, OM.FIELDS.STATUS]
+            columns: [OM.FIELDS.NS_SALES_ORDER, OM.FIELDS.NS_CASH_SALE, OM.FIELDS.NS_INVOICE, OM.FIELDS.STATUS]
         }).run().each(function (result) {
             results.push({
                 id: result.id,
                 nsOrderId: result.getValue(OM.FIELDS.NS_SALES_ORDER),
                 nsCashSaleId: result.getValue(OM.FIELDS.NS_CASH_SALE),
+                nsInvoiceId: result.getValue(OM.FIELDS.NS_INVOICE),
                 status: result.getValue(OM.FIELDS.STATUS)
             });
             return true;
@@ -192,6 +193,7 @@ define([
             : config;
 
         const useCashSale = effectiveConfig.orderType === constants.ORDER_TYPE.CASH_SALE;
+        const useInvoice = effectiveConfig.orderType === constants.ORDER_TYPE.INVOICE;
         const isFBA = amazonOrder.FulfillmentChannel === 'AFN';
         const isB2B = amazonOrder.IsBusinessOrder === true || amazonOrder.IsBusinessOrder === 'true';
 
@@ -201,7 +203,7 @@ define([
             columnItemMap = configHelper.getColumnItemMap(effectiveConfig.configId, { useInOrders: true });
         }
 
-        const recType = useCashSale ? record.Type.CASH_SALE : record.Type.SALES_ORDER;
+        const recType = useInvoice ? record.Type.INVOICE : useCashSale ? record.Type.CASH_SALE : record.Type.SALES_ORDER;
         const txn = record.create({ type: recType, isDynamic: true });
 
         // Resolve customer: marketplace → B2B → FBA → email lookup → create new → default
@@ -230,9 +232,11 @@ define([
         if (location) txn.setValue({ fieldId: 'location', value: location });
 
         // Set custom form if configured
-        if (useCashSale && effectiveConfig.cashSaleForm) {
+        if (useInvoice && effectiveConfig.invoiceForm) {
+            txn.setValue({ fieldId: 'customform', value: effectiveConfig.invoiceForm });
+        } else if (useCashSale && effectiveConfig.cashSaleForm) {
             txn.setValue({ fieldId: 'customform', value: effectiveConfig.cashSaleForm });
-        } else if (!useCashSale && effectiveConfig.salesOrderForm) {
+        } else if (!useCashSale && !useInvoice && effectiveConfig.salesOrderForm) {
             txn.setValue({ fieldId: 'customform', value: effectiveConfig.salesOrderForm });
         }
 
@@ -264,7 +268,7 @@ define([
             txn.setValue({ fieldId: 'trandate', value: new Date(amazonOrder.PurchaseDate) });
         }
 
-        if (useCashSale && effectiveConfig.paymentMethod) {
+        if ((useCashSale || useInvoice) && effectiveConfig.paymentMethod) {
             txn.setValue({ fieldId: 'paymentmethod', value: effectiveConfig.paymentMethod });
         }
 
@@ -364,10 +368,12 @@ define([
         }
 
         const txnId = txn.save({ ignoreMandatoryFields: true });
-        const orderMapId = createOrderMapRecord(effectiveConfig, amazonOrder, txnId, useCashSale);
+        const orderMapId = createOrderMapRecord(effectiveConfig, amazonOrder, txnId, useCashSale, useInvoice);
 
         const result = { orderMapId };
-        if (useCashSale) {
+        if (useInvoice) {
+            result.invoiceId = txnId;
+        } else if (useCashSale) {
             result.cashSaleId = txnId;
         } else {
             result.salesOrderId = txnId;
@@ -483,7 +489,7 @@ define([
     /**
      * Creates an order mapping custom record.
      */
-    function createOrderMapRecord(config, amazonOrder, txnId, isCashSale) {
+    function createOrderMapRecord(config, amazonOrder, txnId, isCashSale, isInvoice) {
         const mapRec = record.create({ type: OM.ID });
         mapRec.setValue({ fieldId: 'name', value: amazonOrder.AmazonOrderId });
         mapRec.setValue({ fieldId: OM.FIELDS.ORDER_ID, value: amazonOrder.AmazonOrderId });
@@ -492,7 +498,9 @@ define([
         mapRec.setValue({ fieldId: OM.FIELDS.LAST_SYNCED, value: new Date() });
         mapRec.setValue({ fieldId: OM.FIELDS.ERROR_COUNT, value: 0 });
 
-        if (isCashSale) {
+        if (isInvoice) {
+            mapRec.setValue({ fieldId: OM.FIELDS.NS_INVOICE, value: txnId });
+        } else if (isCashSale) {
             mapRec.setValue({ fieldId: OM.FIELDS.NS_CASH_SALE, value: txnId });
         } else {
             mapRec.setValue({ fieldId: OM.FIELDS.NS_SALES_ORDER, value: txnId });
@@ -579,33 +587,55 @@ define([
         // Update the mapping record
         updateOrderMapStatus(existingMap.id, newStatus);
 
-        var txnId = existingMap.nsOrderId || existingMap.nsCashSaleId;
+        var txnId = existingMap.nsOrderId || existingMap.nsCashSaleId || existingMap.nsInvoiceId;
         if (!txnId) return;
 
-        var txnType = existingMap.nsOrderId ? record.Type.SALES_ORDER : record.Type.CASH_SALE;
+        var txnType = existingMap.nsOrderId ? record.Type.SALES_ORDER
+            : existingMap.nsCashSaleId ? record.Type.CASH_SALE
+            : record.Type.INVOICE;
 
         // Handle specific status transitions
-        if (amazonOrder.OrderStatus === 'Canceled' && existingMap.nsOrderId) {
-            // Close the Sales Order
-            try {
-                record.submitFields({
-                    type: txnType,
-                    id: txnId,
-                    values: { orderstatus: 'C' }  // Closed
-                });
-                logger.success(constants.LOG_TYPE.ORDER_SYNC,
-                    'Closed SO ' + txnId + ' for canceled Amazon order ' + amazonOrder.AmazonOrderId, {
-                    configId: config.configId,
-                    recordType: txnType,
-                    recordId: txnId,
-                    amazonRef: amazonOrder.AmazonOrderId
-                });
-            } catch (e) {
-                logger.warn(constants.LOG_TYPE.ORDER_SYNC,
-                    'Could not close SO ' + txnId + ': ' + e.message, {
-                    configId: config.configId,
-                    amazonRef: amazonOrder.AmazonOrderId
-                });
+        if (amazonOrder.OrderStatus === 'Canceled') {
+            if (existingMap.nsOrderId) {
+                // Close the Sales Order
+                try {
+                    record.submitFields({
+                        type: txnType,
+                        id: txnId,
+                        values: { orderstatus: 'C' }  // Closed
+                    });
+                    logger.success(constants.LOG_TYPE.ORDER_SYNC,
+                        'Closed SO ' + txnId + ' for canceled Amazon order ' + amazonOrder.AmazonOrderId, {
+                        configId: config.configId,
+                        recordType: txnType,
+                        recordId: txnId,
+                        amazonRef: amazonOrder.AmazonOrderId
+                    });
+                } catch (e) {
+                    logger.warn(constants.LOG_TYPE.ORDER_SYNC,
+                        'Could not close SO ' + txnId + ': ' + e.message, {
+                        configId: config.configId,
+                        amazonRef: amazonOrder.AmazonOrderId
+                    });
+                }
+            } else if (existingMap.nsInvoiceId) {
+                // Void the Invoice
+                try {
+                    record.delete({ type: record.Type.INVOICE, id: txnId });
+                    logger.success(constants.LOG_TYPE.ORDER_SYNC,
+                        'Voided Invoice ' + txnId + ' for canceled Amazon order ' + amazonOrder.AmazonOrderId, {
+                        configId: config.configId,
+                        recordType: 'invoice',
+                        recordId: txnId,
+                        amazonRef: amazonOrder.AmazonOrderId
+                    });
+                } catch (e) {
+                    logger.warn(constants.LOG_TYPE.ORDER_SYNC,
+                        'Could not void Invoice ' + txnId + ': ' + e.message, {
+                        configId: config.configId,
+                        amazonRef: amazonOrder.AmazonOrderId
+                    });
+                }
             }
         }
 

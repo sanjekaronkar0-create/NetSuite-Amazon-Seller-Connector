@@ -155,6 +155,7 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
             orderType: result.getValue(CR.FIELDS.ORDER_TYPE),
             salesOrderForm: result.getValue(CR.FIELDS.SALES_ORDER_FORM),
             cashSaleForm: result.getValue(CR.FIELDS.CASH_SALE_FORM),
+            invoiceForm: result.getValue(CR.FIELDS.INVOICE_FORM),
             // Financial Accounts (SELECT fields populated via lookupFields)
             settleAccount: null,
             feeAccount: null,
@@ -239,6 +240,7 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
             orderType: getValue(CR.FIELDS.ORDER_TYPE),
             salesOrderForm: getValue(CR.FIELDS.SALES_ORDER_FORM),
             cashSaleForm: getValue(CR.FIELDS.CASH_SALE_FORM),
+            invoiceForm: getValue(CR.FIELDS.INVOICE_FORM),
             settleAccount: getValue(CR.FIELDS.SETTLE_ACCOUNT),
             feeAccount: getValue(CR.FIELDS.FEE_ACCOUNT),
             fbaFeeAccount: getValue(CR.FIELDS.FBA_FEE_ACCOUNT),
