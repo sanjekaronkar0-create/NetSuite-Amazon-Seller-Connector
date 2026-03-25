@@ -12,43 +12,6 @@
       <feature required="false">MULTILOCINVT</feature>
     </features>
     <objects>
-      <object>customlist_amz_order_type</object>
-      <object>customlist_amz_log_type</object>
-      <object>customlist_amz_log_status</object>
-      <object>customlist_amz_order_status</object>
-      <object>customlist_amz_fulfill_channel</object>
-      <object>customlist_amz_settle_status</object>
-      <object>customlist_amz_return_status</object>
-      <object>customlist_amz_error_status</object>
-      <object>customrecord_amz_connector_config</object>
-      <object>customrecord_amz_integration_log</object>
-      <object>customrecord_amz_order_map</object>
-      <object>customrecord_amz_item_map</object>
-      <object>customrecord_amz_settlement</object>
-      <object>customrecord_amz_return_map</object>
-      <object>customrecord_amz_error_queue</object>
-      <object>customrecord_amz_charge_map</object>
-      <object>customrecord_amz_column_item_map</object>
-      <object>customrecord_amz_marketplace_cfg</object>
-      <object>customscript_amz_ss_order_sync</object>
-      <object>customscript_amz_mr_order_import</object>
-      <object>customscript_amz_ss_inv_sync</object>
-      <object>customscript_amz_mr_inv_export</object>
-      <object>customscript_amz_ss_settle_sync</object>
-      <object>customscript_amz_mr_settle_process</object>
-      <object>customscript_amz_ss_return_sync</object>
-      <object>customscript_amz_mr_return_process</object>
-      <object>customscript_amz_ss_pricing_sync</object>
-      <object>customscript_amz_ss_catalog_sync</object>
-      <object>customscript_amz_ss_fba_inv_sync</object>
-      <object>customscript_amz_ss_product_export</object>
-      <object>customscript_amz_ss_cancel_sync</object>
-      <object>customscript_amz_ss_data_archival</object>
-      <object>customscript_amz_ss_error_retry</object>
-      <object>customscript_amz_sl_config</object>
-      <object>customscript_amz_cs_config</object>
-      <object>customscript_amz_ue_fulfill</object>
-      <object>customscript_amz_rl_webhook</object>
     </objects>
   </dependencies>
 </manifest>
