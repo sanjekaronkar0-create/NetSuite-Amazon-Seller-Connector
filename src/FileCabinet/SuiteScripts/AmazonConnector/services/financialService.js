@@ -16,6 +16,85 @@ define([
     const STL = constants.CUSTOM_RECORDS.SETTLEMENT;
 
     /**
+     * Creates a NetSuite Invoice from Amazon settlement data.
+     * This is the configurable alternative to createDeposit(), ported from the
+     * old NES_ARES_sch_amazon_invoices.js logic into the new architecture.
+     * @param {Object} config - Connector config with account mappings
+     * @param {Object} settlement - Settlement record data
+     * @param {Object} summary - Financial summary
+     * @returns {number} Invoice record ID
+     */
+    function createInvoice(config, settlement, summary) {
+        const inv = record.create({
+            type: record.Type.INVOICE,
+            isDynamic: true
+        });
+
+        // Set header fields
+        if (config.customer) {
+            inv.setValue({ fieldId: 'entity', value: config.customer });
+        }
+        if (config.subsidiary) {
+            inv.setValue({ fieldId: 'subsidiary', value: config.subsidiary });
+        }
+        if (config.invoiceForm) {
+            inv.setValue({ fieldId: 'customform', value: config.invoiceForm });
+        }
+        if (config.location) {
+            inv.setValue({ fieldId: 'location', value: config.location });
+        }
+
+        inv.setValue({
+            fieldId: 'trandate',
+            value: settlement.endDate ? new Date(settlement.endDate) : new Date()
+        });
+        inv.setValue({
+            fieldId: 'memo',
+            value: 'Amazon Settlement: ' + (settlement.reportId || 'Unknown')
+        });
+        inv.setValue({
+            fieldId: 'otherrefnum',
+            value: settlement.reportId || ''
+        });
+
+        // Add line for product charges (net settlement amount)
+        if (summary.productCharges) {
+            addInvoiceLine(inv, config, 'Product Charges', Math.abs(summary.productCharges));
+        }
+        if (summary.shippingCredits) {
+            addInvoiceLine(inv, config, 'Shipping Credits', Math.abs(summary.shippingCredits));
+        }
+
+        const invId = inv.save({ ignoreMandatoryFields: true });
+
+        logger.success(constants.LOG_TYPE.FINANCIAL_RECON,
+            'Invoice created for settlement ' + settlement.reportId, {
+            configId: config.configId,
+            recordType: 'invoice',
+            recordId: invId,
+            amazonRef: settlement.reportId
+        });
+
+        return invId;
+    }
+
+    /**
+     * Adds a line item to a settlement invoice.
+     */
+    function addInvoiceLine(inv, config, description, amount) {
+        inv.selectNewLine({ sublistId: 'item' });
+        // Use shipping item as a generic service item for settlement lines
+        var itemId = config.shippingItem;
+        if (itemId) {
+            inv.setCurrentSublistValue({ sublistId: 'item', fieldId: 'item', value: itemId });
+        }
+        inv.setCurrentSublistValue({ sublistId: 'item', fieldId: 'quantity', value: 1 });
+        inv.setCurrentSublistValue({ sublistId: 'item', fieldId: 'rate', value: amount });
+        inv.setCurrentSublistValue({ sublistId: 'item', fieldId: 'description', value: description });
+        inv.commitLine({ sublistId: 'item' });
+    }
+
+    /**
      * Creates a NetSuite Deposit from Amazon settlement data.
      * @param {Object} config - Connector config with account mappings
      * @param {Object} settlement - Settlement record data
@@ -84,9 +163,10 @@ define([
      * @param {Object} settlement
      * @param {Object} summary
      * @param {Object} [columnAmounts] - Per-column amounts from settlement parsing
+     * @param {Object} [chargeAccountMap] - { map: {chargeName: accountId}, defaultAccount: accountId }
      * @returns {number} Journal Entry ID
      */
-    function createFeeJournalEntry(config, settlement, summary, columnAmounts) {
+    function createFeeJournalEntry(config, settlement, summary, columnAmounts, chargeAccountMap) {
         const je = record.create({
             type: record.Type.JOURNAL_ENTRY,
             isDynamic: true
@@ -115,14 +195,42 @@ define([
             columnItemMap = configHelper.getColumnItemMap(config.configId, { useInSettle: true });
         }
 
-        if (columnItemMap && Object.keys(columnItemMap).length > 0 && columnAmounts) {
-            // Use column-item mappings for granular JE lines
+        // Charge Account Map lookup (from customrecord_amz_charge_map, like old customrecord_amazon_other_charge)
+        var chargeMap = (chargeAccountMap && chargeAccountMap.map) ? chargeAccountMap.map : null;
+        var chargeDefaultAcct = (chargeAccountMap && chargeAccountMap.defaultAccount) ? chargeAccountMap.defaultAccount : null;
+
+        if (chargeMap && Object.keys(chargeMap).length > 0 && columnAmounts) {
+            // Use charge account map for granular JE lines (ported from old NES_ARES_sch_settlement_charges.js lookupAcct logic)
             for (var colName in columnAmounts) {
                 if (!columnAmounts.hasOwnProperty(colName)) continue;
                 var amount = columnAmounts[colName];
                 if (amount === 0) continue;
 
-                var itemId = columnItemMap[colName];
+                // Look up account from charge map, fallback to default, then to config fee account
+                var resolvedAccount = chargeMap[colName] || chargeDefaultAcct || config.feeAccount;
+                if (!resolvedAccount) continue;
+
+                var absAmount = Math.abs(amount);
+                je.selectNewLine({ sublistId: 'line' });
+                je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'account', value: resolvedAccount });
+                if (amount < 0) {
+                    je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'debit', value: absAmount });
+                } else {
+                    je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'credit', value: absAmount });
+                }
+                je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'memo', value: colName + ' - ' + (settlement.reportId || '') });
+                je.commitLine({ sublistId: 'line' });
+                lineIdx++;
+                totalDebits += amount < 0 ? absAmount : -absAmount;
+            }
+        } else if (columnItemMap && Object.keys(columnItemMap).length > 0 && columnAmounts) {
+            // Use column-item mappings for granular JE lines
+            for (var colName2 in columnAmounts) {
+                if (!columnAmounts.hasOwnProperty(colName2)) continue;
+                var amount2 = columnAmounts[colName2];
+                if (amount2 === 0) continue;
+
+                var itemId = columnItemMap[colName2];
                 if (!itemId) continue;
 
                 // Look up the item's expense/income account for the JE line
@@ -132,18 +240,18 @@ define([
                 }
                 if (!itemAccount) continue;
 
-                var absAmount = Math.abs(amount);
+                var absAmount2 = Math.abs(amount2);
                 je.selectNewLine({ sublistId: 'line' });
                 je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'account', value: itemAccount });
-                if (amount < 0) {
-                    je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'debit', value: absAmount });
+                if (amount2 < 0) {
+                    je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'debit', value: absAmount2 });
                 } else {
-                    je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'credit', value: absAmount });
+                    je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'credit', value: absAmount2 });
                 }
-                je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'memo', value: 'Amazon: ' + colName });
+                je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'memo', value: 'Amazon: ' + colName2 });
                 je.commitLine({ sublistId: 'line' });
                 lineIdx++;
-                totalDebits += amount < 0 ? absAmount : -absAmount;
+                totalDebits += amount2 < 0 ? absAmount2 : -absAmount2;
             }
         } else {
             // Fallback: account-based fee lines (original behavior)
@@ -317,12 +425,75 @@ define([
     }
 
     /**
-     * Updates a settlement record with financial reconciliation references.
+     * Creates multiple Journal Entries split by month within a settlement period.
+     * Ported from old NES_ARES_sch_settlement_charges.js logic where charges spanning
+     * multiple months get separate JEs per month.
+     * @param {Object} config
+     * @param {Object} settlement
+     * @param {Object} rowsByMonth - Map of YYYY-MM to { rows, date, columnAmounts }
+     * @param {Object} [chargeAccountMap] - { map: {chargeName: accountId}, defaultAccount: accountId }
+     * @returns {Array<number>} Array of Journal Entry IDs
      */
-    function updateSettlementFinancials(settlementId, depositId, journalId) {
+    function createFeeJournalEntriesByMonth(config, settlement, rowsByMonth, chargeAccountMap) {
+        var jeIds = [];
+        var sortedMonths = Object.keys(rowsByMonth).sort();
+
+        for (var i = 0; i < sortedMonths.length; i++) {
+            var monthKey = sortedMonths[i];
+            var monthData = rowsByMonth[monthKey];
+
+            if (!monthData.columnAmounts || Object.keys(monthData.columnAmounts).length === 0) continue;
+
+            // Build a month-specific summary from the column amounts
+            var monthSummary = { sellingFees: 0, fbaFees: 0, promoRebates: 0, otherFees: 0 };
+            for (var col in monthData.columnAmounts) {
+                if (!monthData.columnAmounts.hasOwnProperty(col)) continue;
+                monthSummary.otherFees += monthData.columnAmounts[col];
+            }
+
+            // Determine transaction date - use the month's latest posting date
+            var monthSettlement = {
+                reportId: settlement.reportId,
+                endDate: monthData.date ? monthData.date.toISOString() : settlement.endDate
+            };
+
+            var jeId = createFeeJournalEntry(
+                config, monthSettlement, monthSummary, monthData.columnAmounts, chargeAccountMap
+            );
+
+            if (jeId) {
+                jeIds.push(jeId);
+                logger.success(constants.LOG_TYPE.FINANCIAL_RECON,
+                    'Monthly JE created for ' + monthKey + ' - settlement ' + settlement.reportId, {
+                    configId: config.configId,
+                    recordType: 'journalentry',
+                    recordId: jeId,
+                    amazonRef: settlement.reportId
+                });
+            }
+        }
+
+        return jeIds;
+    }
+
+    /**
+     * Updates a settlement record with financial reconciliation references.
+     * Supports the new NS_INVOICE and NS_JOURNALS fields for configurable settlement processing.
+     */
+    function updateSettlementFinancials(settlementId, options) {
+        options = options || {};
         const values = { [STL.FIELDS.STATUS]: constants.SETTLEMENT_STATUS.RECONCILED };
-        if (depositId) values[STL.FIELDS.NS_DEPOSIT] = depositId;
-        if (journalId) values[STL.FIELDS.NS_JOURNAL] = journalId;
+
+        if (options.depositId) values[STL.FIELDS.NS_DEPOSIT] = options.depositId;
+        if (options.invoiceId) values[STL.FIELDS.NS_INVOICE] = options.invoiceId;
+        if (options.journalId) values[STL.FIELDS.NS_JOURNAL] = options.journalId;
+        if (options.journalIds && options.journalIds.length > 0) {
+            values[STL.FIELDS.NS_JOURNALS] = options.journalIds.join(',');
+            // Also set the first JE as the primary reference
+            if (!options.journalId) {
+                values[STL.FIELDS.NS_JOURNAL] = options.journalIds[0];
+            }
+        }
 
         record.submitFields({
             type: STL.ID,
@@ -332,8 +503,10 @@ define([
     }
 
     return {
+        createInvoice,
         createDeposit,
         createFeeJournalEntry,
+        createFeeJournalEntriesByMonth,
         createCreditMemo,
         createCustomerRefund,
         updateSettlementFinancials

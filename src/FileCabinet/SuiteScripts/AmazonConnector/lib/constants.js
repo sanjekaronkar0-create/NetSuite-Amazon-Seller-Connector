@@ -89,7 +89,11 @@ define([], function () {
                 CANCEL_ACTION: 'custrecord_amz_cfg_cancel_action',
                 // Column-Item Mapping Usage Scope
                 COL_MAP_ORDERS: 'custrecord_amz_cfg_col_map_orders',
-                COL_MAP_SETTLE: 'custrecord_amz_cfg_col_map_settle'
+                COL_MAP_SETTLE: 'custrecord_amz_cfg_col_map_settle',
+                // Settlement Transaction Configuration
+                SETTLE_TRAN_TYPE: 'custrecord_amz_cfg_settle_tran_type',
+                JE_GROUPING: 'custrecord_amz_cfg_je_grouping',
+                USE_CHARGE_MAP: 'custrecord_amz_cfg_use_charge_map'
             }
         },
         LOG: {
@@ -164,7 +168,9 @@ define([], function () {
                 OTHER_FEES: 'custrecord_amz_stl_other_fees',
                 REFUNDS: 'custrecord_amz_stl_refunds',
                 NS_DEPOSIT: 'custrecord_amz_stl_ns_deposit',
+                NS_INVOICE: 'custrecord_amz_stl_ns_invoice',
                 NS_JOURNAL: 'custrecord_amz_stl_ns_journal',
+                NS_JOURNALS: 'custrecord_amz_stl_ns_journals',
                 STATUS: 'custrecord_amz_stl_status',
                 CONFIG: 'custrecord_amz_stl_config'
             }
@@ -209,6 +215,16 @@ define([], function () {
                 TAX_ITEM: 'custrecord_amz_mkt_tax_item',
                 TAX_CODE: 'custrecord_amz_mkt_tax_code',
                 CONFIG: 'custrecord_amz_mkt_config'
+            }
+        },
+        CHARGE_MAP: {
+            ID: 'customrecord_amz_charge_map',
+            FIELDS: {
+                CHARGE_NAME: 'custrecord_amz_cm_charge_name',
+                ACCOUNT: 'custrecord_amz_cm_account',
+                CURRENCY: 'custrecord_amz_cm_currency',
+                CONFIG: 'custrecord_amz_cm_config',
+                DEFAULT_ACCOUNT: 'custrecord_amz_cm_default_account'
             }
         },
         ERROR_QUEUE: {
@@ -314,6 +330,16 @@ define([], function () {
         CANCEL_PROCESS: 'CANCEL_PROCESS',
         FBA_INVENTORY: 'FBA_INVENTORY',
         CATALOG_SYNC: 'CATALOG_SYNC'
+    };
+
+    const SETTLEMENT_TRAN_TYPE = {
+        DEPOSIT: 'DEPOSIT',
+        INVOICE: 'INVOICE'
+    };
+
+    const JE_GROUPING = {
+        PER_SETTLEMENT: 'PER_SETTLEMENT',
+        BY_MONTH: 'BY_MONTH'
     };
 
     // ============================================================
@@ -515,6 +541,8 @@ define([], function () {
         RETURN_STATUS,
         ERROR_QUEUE_STATUS,
         ERROR_QUEUE_TYPE,
+        SETTLEMENT_TRAN_TYPE,
+        JE_GROUPING,
         SP_API_ENDPOINTS,
         LWA_TOKEN_URL,
         MARKETPLACE_IDS,

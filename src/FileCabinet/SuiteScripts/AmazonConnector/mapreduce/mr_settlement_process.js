@@ -66,21 +66,27 @@ define([
             const result = JSON.parse(context.value);
             const values = result.values || result;
 
+            var settlementData = {
+                settlementId: result.id,
+                reportId: values[STL.REPORT_ID],
+                totalAmount: parseFloat(values[STL.TOTAL_AMOUNT]) || 0,
+                productCharges: parseFloat(values[STL.PRODUCT_CHARGES]) || 0,
+                shippingCredits: parseFloat(values[STL.SHIPPING_CREDITS]) || 0,
+                promoRebates: parseFloat(values[STL.PROMO_REBATES]) || 0,
+                sellingFees: parseFloat(values[STL.SELLING_FEES]) || 0,
+                fbaFees: parseFloat(values[STL.FBA_FEES]) || 0,
+                otherFees: parseFloat(values[STL.OTHER_FEES]) || 0,
+                refunds: parseFloat(values[STL.REFUNDS]) || 0,
+                endDate: values[STL.END_DATE]
+            };
+
+            // Include parsed column amounts and month groupings if available from data file
+            if (values.columnAmounts) settlementData.columnAmounts = values.columnAmounts;
+            if (values.rowsByMonth) settlementData.rowsByMonth = values.rowsByMonth;
+
             context.write({
                 key: values[STL.CONFIG] ? values[STL.CONFIG].value || values[STL.CONFIG] : 'unknown',
-                value: JSON.stringify({
-                    settlementId: result.id,
-                    reportId: values[STL.REPORT_ID],
-                    totalAmount: parseFloat(values[STL.TOTAL_AMOUNT]) || 0,
-                    productCharges: parseFloat(values[STL.PRODUCT_CHARGES]) || 0,
-                    shippingCredits: parseFloat(values[STL.SHIPPING_CREDITS]) || 0,
-                    promoRebates: parseFloat(values[STL.PROMO_REBATES]) || 0,
-                    sellingFees: parseFloat(values[STL.SELLING_FEES]) || 0,
-                    fbaFees: parseFloat(values[STL.FBA_FEES]) || 0,
-                    otherFees: parseFloat(values[STL.OTHER_FEES]) || 0,
-                    refunds: parseFloat(values[STL.REFUNDS]) || 0,
-                    endDate: values[STL.END_DATE]
-                })
+                value: JSON.stringify(settlementData)
             });
         } catch (e) {
             logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
@@ -89,13 +95,26 @@ define([
     }
 
     /**
-     * Reduce stage: Create Deposits and Journal Entries per config.
+     * Reduce stage: Create Deposits/Invoices and Journal Entries per config.
+     * Supports configurable settlement transaction type (DEPOSIT or INVOICE)
+     * and JE grouping (PER_SETTLEMENT or BY_MONTH).
      */
     function reduce(context) {
         const configId = context.key;
 
         try {
             const config = configHelper.getConfig(configId);
+
+            // Determine settlement processing mode from config
+            const settleTranType = config.settleTranType || constants.SETTLEMENT_TRAN_TYPE.DEPOSIT;
+            const jeGrouping = config.jeGrouping || constants.JE_GROUPING.PER_SETTLEMENT;
+            const useChargeMap = config.useChargeMap === true || config.useChargeMap === 'T';
+
+            // Load charge account map if enabled
+            let chargeAccountMap = null;
+            if (useChargeMap) {
+                chargeAccountMap = configHelper.getChargeAccountMap(configId);
+            }
 
             for (const val of context.values) {
                 const settlement = JSON.parse(val);
@@ -113,25 +132,53 @@ define([
                     };
 
                     let depositId = null;
+                    let invoiceId = null;
                     let journalId = null;
+                    let journalIds = [];
 
-                    // Create Deposit if auto-deposit is enabled and account configured
-                    if (config.autoDeposit && config.settleAccount && summary.totalAmount) {
-                        depositId = financialService.createDeposit(config, settlement, summary);
+                    // Create payment transaction based on configured type
+                    if (settleTranType === constants.SETTLEMENT_TRAN_TYPE.INVOICE) {
+                        // Invoice mode (like old NES_ARES_sch_amazon_invoices.js)
+                        if (config.customer && summary.totalAmount) {
+                            invoiceId = financialService.createInvoice(config, settlement, summary);
+                        }
+                    } else {
+                        // Deposit mode (default, existing behavior)
+                        if (config.autoDeposit && config.settleAccount && summary.totalAmount) {
+                            depositId = financialService.createDeposit(config, settlement, summary);
+                        }
                     }
 
-                    // Create Fee Journal Entry if fee accounts configured
-                    if (config.feeAccount && (summary.sellingFees || summary.fbaFees || summary.otherFees)) {
-                        journalId = financialService.createFeeJournalEntry(config, settlement, summary);
+                    // Create Fee Journal Entries based on configured grouping
+                    var hasFees = summary.sellingFees || summary.fbaFees || summary.otherFees || summary.promoRebates;
+                    var hasAccount = config.feeAccount || (chargeAccountMap && Object.keys(chargeAccountMap.map).length > 0);
+
+                    if (hasFees && hasAccount) {
+                        if (jeGrouping === constants.JE_GROUPING.BY_MONTH && settlement.rowsByMonth) {
+                            // Split JEs by month (like old NES_ARES_sch_settlement_charges.js)
+                            journalIds = financialService.createFeeJournalEntriesByMonth(
+                                config, settlement, settlement.rowsByMonth, chargeAccountMap
+                            );
+                        } else {
+                            // Single JE per settlement (default)
+                            journalId = financialService.createFeeJournalEntry(
+                                config, settlement, summary, settlement.columnAmounts, chargeAccountMap
+                            );
+                        }
                     }
 
-                    // Update settlement record
-                    financialService.updateSettlementFinancials(
-                        settlement.settlementId, depositId, journalId
-                    );
+                    // Update settlement record with all financial references
+                    financialService.updateSettlementFinancials(settlement.settlementId, {
+                        depositId: depositId,
+                        invoiceId: invoiceId,
+                        journalId: journalId,
+                        journalIds: journalIds
+                    });
 
                     logger.success(constants.LOG_TYPE.FINANCIAL_RECON,
-                        'Settlement ' + settlement.reportId + ' reconciled', {
+                        'Settlement ' + settlement.reportId + ' reconciled' +
+                        (settleTranType === constants.SETTLEMENT_TRAN_TYPE.INVOICE ? ' (Invoice)' : ' (Deposit)') +
+                        (jeGrouping === constants.JE_GROUPING.BY_MONTH ? ' [JEs by month]' : ''), {
                         configId: configId,
                         amazonRef: settlement.reportId
                     });
@@ -146,7 +193,7 @@ define([
 
                     // Queue for retry
                     errorQueue.enqueue({
-                        type: constants.ERROR_QUEUE_TYPE.DEPOSIT_CREATE,
+                        type: constants.ERROR_QUEUE_TYPE.SETTLEMENT_PROCESS,
                         amazonRef: settlement.reportId,
                         errorMsg: e.message,
                         configId: configId,
