@@ -316,13 +316,189 @@ define([
         return refund.save({ ignoreMandatoryFields: true });
     }
 
+    // ================================================================
+    // Settlement → Invoice Fee Lines
+    // ================================================================
+
+    const OM = constants.CUSTOM_RECORDS.ORDER_MAP;
+
+    /**
+     * Finds a NetSuite invoice ID by Amazon order ID.
+     * Checks order map first, then falls back to otherrefnum search.
+     * @param {string} amazonOrderId
+     * @returns {string|null} Invoice internal ID
+     */
+    function findInvoiceByAmazonOrderId(amazonOrderId) {
+        if (!amazonOrderId) return null;
+
+        // Primary: check order map
+        var invoiceId = null;
+        search.create({
+            type: OM.ID,
+            filters: [[OM.FIELDS.ORDER_ID, 'is', amazonOrderId]],
+            columns: [OM.FIELDS.NS_INVOICE]
+        }).run().each(function (result) {
+            invoiceId = result.getValue(OM.FIELDS.NS_INVOICE);
+            return false;
+        });
+
+        if (invoiceId) return invoiceId;
+
+        // Fallback: search invoice by otherrefnum
+        search.create({
+            type: 'invoice',
+            filters: [['otherrefnum', 'is', amazonOrderId]],
+            columns: ['internalid']
+        }).run().each(function (result) {
+            invoiceId = result.id;
+            return false;
+        });
+
+        return invoiceId;
+    }
+
+    /**
+     * Checks if an invoice already has a line with matching item and description.
+     * Used to prevent duplicate fee lines on re-runs.
+     */
+    function feeLineExists(inv, itemId, description) {
+        var lineCount = inv.getLineCount({ sublistId: 'item' });
+        for (var i = 0; i < lineCount; i++) {
+            var lineItem = inv.getSublistValue({ sublistId: 'item', fieldId: 'item', line: i });
+            var lineDesc = inv.getSublistValue({ sublistId: 'item', fieldId: 'description', line: i });
+            if (String(lineItem) === String(itemId) && lineDesc === description) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Adds settlement fee lines as line items on an existing invoice.
+     * Uses column-item mappings (customrecord_amz_column_item_map with useInSettle)
+     * to resolve fee descriptions to NetSuite items.
+     * @param {Object} config - Connector config
+     * @param {Object} columnAmounts - Per-column amounts { "fba fees": -5.00, ... }
+     * @param {string} amazonOrderId - Amazon order ID to find the invoice
+     * @returns {string|null} Updated invoice ID, or null if not applicable
+     */
+    function addFeeLinesToInvoice(config, columnAmounts, amazonOrderId) {
+        if (!columnAmounts || Object.keys(columnAmounts).length === 0) return null;
+
+        var invoiceId = findInvoiceByAmazonOrderId(amazonOrderId);
+        if (!invoiceId) {
+            log.debug({
+                title: 'addFeeLinesToInvoice',
+                details: 'No invoice found for Amazon order ' + amazonOrderId
+            });
+            return null;
+        }
+
+        var columnItemMap = configHelper.getColumnItemMap(config.configId, { useInSettle: true });
+        if (!columnItemMap || Object.keys(columnItemMap).length === 0) {
+            log.debug({
+                title: 'addFeeLinesToInvoice',
+                details: 'No column-item mappings configured for settlement'
+            });
+            return null;
+        }
+
+        var inv = record.load({ type: record.Type.INVOICE, id: invoiceId, isDynamic: true });
+        var addedAny = false;
+
+        for (var colName in columnAmounts) {
+            if (!columnAmounts.hasOwnProperty(colName)) continue;
+            var amount = columnAmounts[colName];
+            if (amount === 0) continue;
+
+            var itemId = columnItemMap[colName];
+            if (!itemId) continue;
+
+            var desc = 'Amazon: ' + colName;
+
+            // Dedup: skip if line already exists
+            if (feeLineExists(inv, itemId, desc)) continue;
+
+            inv.selectNewLine({ sublistId: 'item' });
+            inv.setCurrentSublistValue({ sublistId: 'item', fieldId: 'item', value: itemId });
+            inv.setCurrentSublistValue({ sublistId: 'item', fieldId: 'quantity', value: 1 });
+            inv.setCurrentSublistValue({ sublistId: 'item', fieldId: 'rate', value: amount });
+            inv.setCurrentSublistValue({ sublistId: 'item', fieldId: 'description', value: desc });
+            if (config.taxCode) {
+                inv.setCurrentSublistValue({ sublistId: 'item', fieldId: 'taxcode', value: config.taxCode });
+            }
+            inv.commitLine({ sublistId: 'item' });
+            addedAny = true;
+        }
+
+        if (!addedAny) return invoiceId;
+
+        var savedId = inv.save({ ignoreMandatoryFields: true });
+
+        logger.success(constants.LOG_TYPE.FINANCIAL_RECON,
+            'Fee lines added to invoice for order ' + amazonOrderId, {
+            configId: config.configId,
+            recordType: 'invoice',
+            recordId: savedId,
+            amazonRef: amazonOrderId
+        });
+
+        return savedId;
+    }
+
+    // ================================================================
+    // Customer Payment from Invoice
+    // ================================================================
+
+    /**
+     * Creates a Customer Payment by transforming an invoice.
+     * Applies the settlement amount against the invoice balance.
+     * @param {Object} config - Connector config
+     * @param {string} invoiceId - NetSuite invoice internal ID
+     * @param {Object} settlement - Settlement data with reportId, endDate
+     * @returns {number} Customer Payment record ID
+     */
+    function createCustomerPayment(config, invoiceId, settlement) {
+        var payment = record.transform({
+            fromType: record.Type.INVOICE,
+            fromId: invoiceId,
+            toType: record.Type.CUSTOMER_PAYMENT,
+            isDynamic: true
+        });
+
+        if (config.paymentMethod) {
+            payment.setValue({ fieldId: 'paymentmethod', value: config.paymentMethod });
+        }
+        payment.setValue({
+            fieldId: 'trandate',
+            value: settlement.endDate ? new Date(settlement.endDate) : new Date()
+        });
+        payment.setValue({
+            fieldId: 'memo',
+            value: 'Amazon Settlement: ' + (settlement.reportId || 'Unknown')
+        });
+
+        var paymentId = payment.save({ ignoreMandatoryFields: true });
+
+        logger.success(constants.LOG_TYPE.FINANCIAL_RECON,
+            'Customer Payment created for settlement ' + (settlement.reportId || 'Unknown'), {
+            configId: config.configId,
+            recordType: 'customerpayment',
+            recordId: paymentId,
+            amazonRef: settlement.reportId
+        });
+
+        return paymentId;
+    }
+
     /**
      * Updates a settlement record with financial reconciliation references.
      */
-    function updateSettlementFinancials(settlementId, depositId, journalId) {
+    function updateSettlementFinancials(settlementId, depositId, journalId, paymentId) {
         const values = { [STL.FIELDS.STATUS]: constants.SETTLEMENT_STATUS.RECONCILED };
         if (depositId) values[STL.FIELDS.NS_DEPOSIT] = depositId;
         if (journalId) values[STL.FIELDS.NS_JOURNAL] = journalId;
+        if (paymentId) values[STL.FIELDS.NS_PAYMENT] = paymentId;
 
         record.submitFields({
             type: STL.ID,
@@ -334,8 +510,11 @@ define([
     return {
         createDeposit,
         createFeeJournalEntry,
+        addFeeLinesToInvoice,
+        createCustomerPayment,
         createCreditMemo,
         createCustomerRefund,
-        updateSettlementFinancials
+        updateSettlementFinancials,
+        findInvoiceByAmazonOrderId
     };
 });

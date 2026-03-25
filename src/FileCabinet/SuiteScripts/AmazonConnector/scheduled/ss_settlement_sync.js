@@ -51,8 +51,28 @@ define([
 
                     log.audit({
                         title: 'Settlement Sync',
-                        details: 'Found ' + readyReports.length + ' reports. Triggering Map/Reduce processing.'
+                        details: 'Found ' + readyReports.length + ' reports. Downloading and parsing.'
                     });
+
+                    // Download and parse each report to include per-order column amounts
+                    for (var ri = 0; ri < readyReports.length; ri++) {
+                        if (readyReports[ri].reportDocumentId) {
+                            try {
+                                var parsed = settlementService.downloadSettlementReport(
+                                    config, readyReports[ri].reportDocumentId
+                                );
+                                readyReports[ri].columnAmounts = parsed.columnAmounts || {};
+                                readyReports[ri].orderColumnAmounts = parsed.orderColumnAmounts || {};
+                                readyReports[ri].summary = parsed.summary || {};
+                            } catch (dlErr) {
+                                log.debug({
+                                    title: 'Settlement Sync',
+                                    details: 'Could not download report ' + readyReports[ri].reportId +
+                                        ': ' + dlErr.message
+                                });
+                            }
+                        }
+                    }
 
                     // Write settlement data to File Cabinet (script params are too small for JSON)
                     var fileId = mrDataHelper.writeDataFile({

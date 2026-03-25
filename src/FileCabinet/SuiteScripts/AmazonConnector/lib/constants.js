@@ -89,7 +89,10 @@ define([], function () {
                 CANCEL_ACTION: 'custrecord_amz_cfg_cancel_action',
                 // Column-Item Mapping Usage Scope
                 COL_MAP_ORDERS: 'custrecord_amz_cfg_col_map_orders',
-                COL_MAP_SETTLE: 'custrecord_amz_cfg_col_map_settle'
+                COL_MAP_SETTLE: 'custrecord_amz_cfg_col_map_settle',
+                // Settlement Fee & Payment Mode
+                SETTLE_FEE_MODE: 'custrecord_amz_cfg_settle_fee_mode',
+                SETTLE_PAYMENT_MODE: 'custrecord_amz_cfg_settle_pay_mode'
             }
         },
         LOG: {
@@ -165,6 +168,7 @@ define([], function () {
                 REFUNDS: 'custrecord_amz_stl_refunds',
                 NS_DEPOSIT: 'custrecord_amz_stl_ns_deposit',
                 NS_JOURNAL: 'custrecord_amz_stl_ns_journal',
+                NS_PAYMENT: 'custrecord_amz_stl_ns_payment',
                 STATUS: 'custrecord_amz_stl_status',
                 CONFIG: 'custrecord_amz_stl_config'
             }
@@ -286,6 +290,16 @@ define([], function () {
         PROCESSING: '2',
         RECONCILED: '3',
         ERROR: '4'
+    };
+
+    const SETTLE_FEE_MODE = {
+        JOURNAL: '1',
+        INVOICE: '2'
+    };
+
+    const SETTLE_PAYMENT_MODE = {
+        DEPOSIT: '1',
+        PAYMENT: '2'
     };
 
     const RETURN_STATUS = {
@@ -512,6 +526,8 @@ define([], function () {
         ORDER_TYPE,
         FULFILLMENT_CHANNEL,
         SETTLEMENT_STATUS,
+        SETTLE_FEE_MODE,
+        SETTLE_PAYMENT_MODE,
         RETURN_STATUS,
         ERROR_QUEUE_STATUS,
         ERROR_QUEUE_TYPE,

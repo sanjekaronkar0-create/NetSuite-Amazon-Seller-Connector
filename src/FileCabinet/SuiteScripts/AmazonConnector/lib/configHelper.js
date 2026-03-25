@@ -206,7 +206,10 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
             cancelAction: result.getValue(CR.FIELDS.CANCEL_ACTION) || 'close',
             // Column-Item Mapping Usage Scope
             colMapOrders: result.getValue(CR.FIELDS.COL_MAP_ORDERS),
-            colMapSettle: result.getValue(CR.FIELDS.COL_MAP_SETTLE)
+            colMapSettle: result.getValue(CR.FIELDS.COL_MAP_SETTLE),
+            // Settlement Fee & Payment Mode
+            settleFeeMode: result.getValue(CR.FIELDS.SETTLE_FEE_MODE),
+            settlePaymentMode: result.getValue(CR.FIELDS.SETTLE_PAYMENT_MODE)
         };
     }
 
@@ -285,7 +288,10 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
             cancelAction: getValue(CR.FIELDS.CANCEL_ACTION) || 'close',
             // Column-Item Mapping Usage Scope
             colMapOrders: getValue(CR.FIELDS.COL_MAP_ORDERS),
-            colMapSettle: getValue(CR.FIELDS.COL_MAP_SETTLE)
+            colMapSettle: getValue(CR.FIELDS.COL_MAP_SETTLE),
+            // Settlement Fee & Payment Mode
+            settleFeeMode: getValue(CR.FIELDS.SETTLE_FEE_MODE),
+            settlePaymentMode: getValue(CR.FIELDS.SETTLE_PAYMENT_MODE)
         };
     }
 

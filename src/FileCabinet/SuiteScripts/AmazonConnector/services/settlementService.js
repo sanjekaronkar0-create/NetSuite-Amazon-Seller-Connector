@@ -51,7 +51,7 @@ define([
      */
     function parseSettlementData(rawData) {
         const lines = rawData.split('\n');
-        if (lines.length < 2) return { rows: [], summary: {}, columnAmounts: {} };
+        if (lines.length < 2) return { rows: [], summary: {}, columnAmounts: {}, orderColumnAmounts: {} };
 
         const headers = lines[0].split('\t').map(h => h.trim());
         const rows = [];
@@ -65,8 +65,10 @@ define([
             refunds: 0,
             totalAmount: 0
         };
-        // Track amounts per column name for column-item mapping
+        // Track amounts per column name for column-item mapping (aggregate)
         const columnAmounts = {};
+        // Track amounts per order per column name for invoice fee line mode
+        const orderColumnAmounts = {};
 
         for (let i = 1; i < lines.length; i++) {
             if (!lines[i].trim()) continue;
@@ -80,9 +82,10 @@ define([
 
             categorizeAmount(row, summary);
             trackColumnAmount(row, columnAmounts);
+            trackOrderColumnAmount(row, orderColumnAmounts);
         }
 
-        return { rows, summary, columnAmounts };
+        return { rows, summary, columnAmounts, orderColumnAmounts };
     }
 
     /**
@@ -129,6 +132,31 @@ define([
             columnAmounts[colName] = 0;
         }
         columnAmounts[colName] += amount;
+    }
+
+    /**
+     * Tracks settlement row amounts grouped by order ID and column name.
+     * Enables adding fee lines to individual invoices during settlement processing.
+     * @param {Object} row - Parsed settlement row
+     * @param {Object} orderColumnAmounts - Map of orderId → { columnName: amount }
+     */
+    function trackOrderColumnAmount(row, orderColumnAmounts) {
+        var amount = parseFloat(row['amount'] || row['total'] || 0);
+        if (amount === 0) return;
+
+        var orderId = (row['order-id'] || row['order id'] || row['amazon-order-id'] || '').trim();
+        if (!orderId) return;
+
+        var colName = (row['amount-description'] || row['description'] || row['amount-type'] || row['type'] || '').toLowerCase().trim();
+        if (!colName) return;
+
+        if (!orderColumnAmounts[orderId]) {
+            orderColumnAmounts[orderId] = {};
+        }
+        if (!orderColumnAmounts[orderId][colName]) {
+            orderColumnAmounts[orderId][colName] = 0;
+        }
+        orderColumnAmounts[orderId][colName] += amount;
     }
 
     /**
