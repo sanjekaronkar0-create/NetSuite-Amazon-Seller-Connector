@@ -100,8 +100,18 @@ define([
     function reduce(context) {
         const amazonOrderId = context.key;
 
+        var data;
         try {
-            const data = JSON.parse(context.values[0]);
+            data = JSON.parse(context.values[0]);
+        } catch (parseErr) {
+            logger.error(constants.LOG_TYPE.ORDER_SYNC,
+                'Failed to parse reduce data for ' + amazonOrderId + ': ' + parseErr.message, {
+                amazonRef: amazonOrderId
+            });
+            return;
+        }
+
+        try {
             const config = configHelper.getConfig(data.configId);
             const amazonOrder = data.order;
 
