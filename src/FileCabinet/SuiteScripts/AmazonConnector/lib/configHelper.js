@@ -35,7 +35,10 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
         CR.FIELDS.SHIPPING_ITEM,
         CR.FIELDS.DISCOUNT_ITEM,
         CR.FIELDS.TAX_ITEM,
-        CR.FIELDS.TAX_CODE
+        CR.FIELDS.TAX_CODE,
+        CR.FIELDS.SALES_ORDER_FORM,
+        CR.FIELDS.CASH_SALE_FORM,
+        CR.FIELDS.INVOICE_FORM
     ];
 
     // Map from field ID to config property name for lookup-only fields.
@@ -55,6 +58,9 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
     LOOKUP_FIELD_MAP[CR.FIELDS.DISCOUNT_ITEM] = 'discountItem';
     LOOKUP_FIELD_MAP[CR.FIELDS.TAX_ITEM] = 'taxItem';
     LOOKUP_FIELD_MAP[CR.FIELDS.TAX_CODE] = 'taxCode';
+    LOOKUP_FIELD_MAP[CR.FIELDS.SALES_ORDER_FORM] = 'salesOrderForm';
+    LOOKUP_FIELD_MAP[CR.FIELDS.CASH_SALE_FORM] = 'cashSaleForm';
+    LOOKUP_FIELD_MAP[CR.FIELDS.INVOICE_FORM] = 'invoiceForm';
 
     /**
      * Extracts the value from a lookupFields result entry.
@@ -153,9 +159,9 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
             lastCatalogSync: result.getValue(CR.FIELDS.LAST_CATALOG_SYNC),
             // Order Configuration
             orderType: result.getValue(CR.FIELDS.ORDER_TYPE),
-            salesOrderForm: result.getValue(CR.FIELDS.SALES_ORDER_FORM),
-            cashSaleForm: result.getValue(CR.FIELDS.CASH_SALE_FORM),
-            invoiceForm: result.getValue(CR.FIELDS.INVOICE_FORM),
+            salesOrderForm: null,
+            cashSaleForm: null,
+            invoiceForm: null,
             // Financial Accounts (SELECT fields populated via lookupFields)
             settleAccount: null,
             feeAccount: null,
@@ -364,7 +370,8 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
             MKT.FIELDS.LOCATION,
             MKT.FIELDS.FBA_LOCATION,
             MKT.FIELDS.TAX_ITEM,
-            MKT.FIELDS.TAX_CODE
+            MKT.FIELDS.TAX_CODE,
+            MKT.FIELDS.PAYMENT_METHOD
         ];
 
         search.create({
@@ -374,13 +381,13 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
                 'AND',
                 ['isinactive', 'is', 'F']
             ],
-            columns: [MKT.FIELDS.MARKETPLACE_ID, MKT.FIELDS.MARKETPLACE_NAME, MKT.FIELDS.PAYMENT_METHOD]
+            columns: [MKT.FIELDS.MARKETPLACE_ID, MKT.FIELDS.MARKETPLACE_NAME]
         }).run().each(function (result) {
             var mktCfg = {
                 id: result.id,
                 marketplaceId: (result.getValue(MKT.FIELDS.MARKETPLACE_ID) || '').trim(),
                 marketplaceName: result.getValue(MKT.FIELDS.MARKETPLACE_NAME) || '',
-                paymentMethod: result.getValue(MKT.FIELDS.PAYMENT_METHOD),
+                paymentMethod: null,
                 customer: null,
                 fbaCustomer: null,
                 b2bCustomer: null,
@@ -405,6 +412,7 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
                 mktCfg.fbaLocation = extractLookupValue(looked[MKT.FIELDS.FBA_LOCATION]);
                 mktCfg.taxItem = extractLookupValue(looked[MKT.FIELDS.TAX_ITEM]);
                 mktCfg.taxCode = extractLookupValue(looked[MKT.FIELDS.TAX_CODE]);
+                mktCfg.paymentMethod = extractLookupValue(looked[MKT.FIELDS.PAYMENT_METHOD]);
             } catch (e) {
                 log.debug({ title: 'getMarketplaceConfigs', details: 'lookupFields error: ' + e.message });
             }
