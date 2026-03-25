@@ -370,7 +370,8 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
             MKT.FIELDS.LOCATION,
             MKT.FIELDS.FBA_LOCATION,
             MKT.FIELDS.TAX_ITEM,
-            MKT.FIELDS.TAX_CODE
+            MKT.FIELDS.TAX_CODE,
+            MKT.FIELDS.PAYMENT_METHOD
         ];
 
         search.create({
@@ -380,13 +381,13 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
                 'AND',
                 ['isinactive', 'is', 'F']
             ],
-            columns: [MKT.FIELDS.MARKETPLACE_ID, MKT.FIELDS.MARKETPLACE_NAME, MKT.FIELDS.PAYMENT_METHOD]
+            columns: [MKT.FIELDS.MARKETPLACE_ID, MKT.FIELDS.MARKETPLACE_NAME]
         }).run().each(function (result) {
             var mktCfg = {
                 id: result.id,
                 marketplaceId: (result.getValue(MKT.FIELDS.MARKETPLACE_ID) || '').trim(),
                 marketplaceName: result.getValue(MKT.FIELDS.MARKETPLACE_NAME) || '',
-                paymentMethod: result.getValue(MKT.FIELDS.PAYMENT_METHOD),
+                paymentMethod: null,
                 customer: null,
                 fbaCustomer: null,
                 b2bCustomer: null,
@@ -411,6 +412,7 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
                 mktCfg.fbaLocation = extractLookupValue(looked[MKT.FIELDS.FBA_LOCATION]);
                 mktCfg.taxItem = extractLookupValue(looked[MKT.FIELDS.TAX_ITEM]);
                 mktCfg.taxCode = extractLookupValue(looked[MKT.FIELDS.TAX_CODE]);
+                mktCfg.paymentMethod = extractLookupValue(looked[MKT.FIELDS.PAYMENT_METHOD]);
             } catch (e) {
                 log.debug({ title: 'getMarketplaceConfigs', details: 'lookupFields error: ' + e.message });
             }
