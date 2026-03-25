@@ -100,11 +100,11 @@ define([
 
             const config = configHelper.getConfig(configId);
 
-            // Find linked sales order
-            const orderLink = returnService.getLinkedSalesOrder(amazonOrderId);
-            if (!orderLink || !orderLink.salesOrderId) {
+            // Find linked order (Sales Order or Invoice)
+            const orderLink = returnService.getLinkedOrder(amazonOrderId);
+            if (!orderLink || (!orderLink.salesOrderId && !orderLink.invoiceId)) {
                 logger.warn(constants.LOG_TYPE.RETURN_SYNC,
-                    'No linked SO for return on order ' + amazonOrderId, {
+                    'No linked order for return on order ' + amazonOrderId, {
                     configId: configId,
                     amazonRef: amazonOrderId
                 });
@@ -114,32 +114,56 @@ define([
             // Build consolidated return data
             mergedReturnData.returnedSkus = allSkus;
 
-            // Create Return Authorization
-            const rmaId = returnService.createReturnAuthorization(
-                config, mergedReturnData, orderLink.salesOrderId
-            );
-
-            // Create Credit Memo if auto-credit-memo is enabled
+            let rmaId = null;
             let creditMemoId = null;
-            if (config.autoCreditMemo) {
+
+            if (orderLink.invoiceId) {
+                // Invoice path: create Credit Memo directly (no RMA)
                 try {
-                    creditMemoId = financialService.createCreditMemo(config, rmaId, mergedReturnData);
+                    creditMemoId = returnService.createCreditMemoFromInvoice(
+                        config, mergedReturnData, orderLink.invoiceId
+                    );
                 } catch (cmErr) {
                     logger.error(constants.LOG_TYPE.RETURN_SYNC,
-                        'Credit Memo creation failed for ' + amazonOrderId + ': ' + cmErr.message, {
+                        'Credit Memo creation from Invoice failed for ' + amazonOrderId + ': ' + cmErr.message, {
                         configId: configId,
                         amazonRef: amazonOrderId,
                         details: cmErr.stack
                     });
-
-                    // Queue for retry
                     errorQueue.enqueue({
                         type: constants.ERROR_QUEUE_TYPE.CREDIT_MEMO_CREATE,
                         amazonRef: amazonOrderId,
                         errorMsg: cmErr.message,
                         configId: configId,
-                        payload: JSON.stringify({ rmaId, returnData: mergedReturnData })
+                        payload: JSON.stringify({ invoiceId: orderLink.invoiceId, returnData: mergedReturnData })
                     });
+                    throw cmErr;
+                }
+            } else {
+                // Sales Order path: create Return Authorization
+                rmaId = returnService.createReturnAuthorization(
+                    config, mergedReturnData, orderLink.salesOrderId
+                );
+
+                // Create Credit Memo if auto-credit-memo is enabled
+                if (config.autoCreditMemo) {
+                    try {
+                        creditMemoId = financialService.createCreditMemo(config, rmaId, mergedReturnData);
+                    } catch (cmErr) {
+                        logger.error(constants.LOG_TYPE.RETURN_SYNC,
+                            'Credit Memo creation failed for ' + amazonOrderId + ': ' + cmErr.message, {
+                            configId: configId,
+                            amazonRef: amazonOrderId,
+                            details: cmErr.stack
+                        });
+                        errorQueue.enqueue({
+                            type: constants.ERROR_QUEUE_TYPE.CREDIT_MEMO_CREATE,
+                            amazonRef: amazonOrderId,
+                            errorMsg: cmErr.message,
+                            configId: configId,
+                            payload: JSON.stringify({ rmaId, returnData: mergedReturnData })
+                        });
+                    }
                 }
             }
 
@@ -153,13 +177,15 @@ define([
                 returnService.updateReturnCreditMemo(mapId, creditMemoId);
             }
 
+            var recordType = rmaId ? 'returnauthorization' : 'creditmemo';
+            var recordId = rmaId || creditMemoId;
             logger.success(constants.LOG_TYPE.RETURN_SYNC,
-                'Return processed: RMA=' + rmaId +
-                (creditMemoId ? ', CM=' + creditMemoId : '') +
+                'Return processed: ' + (rmaId ? 'RMA=' + rmaId : '') +
+                (creditMemoId ? (rmaId ? ', ' : '') + 'CM=' + creditMemoId : '') +
                 ' for order ' + amazonOrderId, {
                 configId: configId,
-                recordType: 'returnauthorization',
-                recordId: rmaId,
+                recordType: recordType,
+                recordId: recordId,
                 amazonRef: amazonOrderId
             });
 

@@ -2,7 +2,7 @@
  * @NApiVersion 2.1
  * @NScriptType MapReduceScript
  * @NModuleScope SameAccount
- * @description Map/Reduce script that imports Amazon orders into NetSuite as Sales Orders.
+ * @description Map/Reduce script that imports Amazon orders into NetSuite as Sales Orders, Cash Sales, or Invoices.
  *              Receives order data from the scheduled order sync script.
  */
 define([
@@ -95,7 +95,7 @@ define([
     }
 
     /**
-     * Reduce stage: Creates the NetSuite Sales Order for each Amazon order.
+     * Reduce stage: Creates the NetSuite transaction (Sales Order, Cash Sale, or Invoice) for each Amazon order.
      */
     function reduce(context) {
         const amazonOrderId = context.key;
@@ -156,20 +156,23 @@ define([
                 amazonOrder.ShippingAddress = address;
             }
 
-            // Create NetSuite Sales Order
+            // Create NetSuite transaction (Sales Order, Cash Sale, or Invoice)
             const result = orderService.createSalesOrder(config, amazonOrder, orderItems);
 
+            var txnType = result.invoiceId ? 'invoice' : result.cashSaleId ? 'cashsale' : 'salesorder';
+            var txnId = result.invoiceId || result.cashSaleId || result.salesOrderId;
+
             logger.success(constants.LOG_TYPE.ORDER_SYNC,
-                'Sales Order created for Amazon order ' + amazonOrderId, {
+                txnType + ' created for Amazon order ' + amazonOrderId, {
                 configId: data.configId,
-                recordType: 'salesorder',
-                recordId: result.salesOrderId,
+                recordType: txnType,
+                recordId: txnId,
                 amazonRef: amazonOrderId
             });
 
         } catch (e) {
             logger.error(constants.LOG_TYPE.ORDER_SYNC,
-                'Failed to create SO for Amazon order ' + amazonOrderId + ': ' + e.message, {
+                'Failed to create order for Amazon order ' + amazonOrderId + ': ' + e.message, {
                 amazonRef: amazonOrderId,
                 details: e.stack
             });

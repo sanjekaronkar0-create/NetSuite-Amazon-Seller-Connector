@@ -17,13 +17,14 @@ define([
     const OM = constants.CUSTOM_RECORDS.ORDER_MAP;
 
     /**
-     * Gets the Amazon Order ID for a NetSuite Sales Order.
+     * Gets the Amazon Order ID for a NetSuite Sales Order or Invoice.
      * @param {string|number} salesOrderId
      * @returns {Object|null} Order mapping info
      */
     function getAmazonOrderForSalesOrder(salesOrderId) {
         let result = null;
 
+        // Search by Sales Order ID first
         search.create({
             type: OM.ID,
             filters: [[OM.FIELDS.NS_SALES_ORDER, 'anyof', salesOrderId]],
@@ -37,6 +38,24 @@ define([
             };
             return false;
         });
+
+        // Fallback: search by Invoice ID
+        if (!result) {
+            search.create({
+                type: OM.ID,
+                filters: [[OM.FIELDS.NS_INVOICE, 'anyof', salesOrderId]],
+                columns: [OM.FIELDS.ORDER_ID, OM.FIELDS.CONFIG, OM.FIELDS.FULFILLMENT_CHANNEL]
+            }).run().each(function (r) {
+                result = {
+                    mapId: r.id,
+                    amazonOrderId: r.getValue(OM.FIELDS.ORDER_ID),
+                    configId: r.getValue(OM.FIELDS.CONFIG),
+                    fulfillmentChannel: r.getValue(OM.FIELDS.FULFILLMENT_CHANNEL),
+                    isInvoice: true
+                };
+                return false;
+            });
+        }
 
         return result;
     }
