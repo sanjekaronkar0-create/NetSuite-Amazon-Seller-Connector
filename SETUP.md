@@ -130,6 +130,9 @@ Set up NetSuite items for Amazon-specific charges:
 | Shipping charges | Amazon Shipping Charge | Other Charge Item |
 | Discounts | Amazon Promotion Discount | Discount Item |
 | Tax | Amazon Tax | Tax Item |
+| FBA Commission fees | FBA Fees : Commission | Other Charge Item |
+| FBA Fulfillment fees | FBA Fees : Fulfillment | Other Charge Item |
+| FBA Gift Wrap fees | FBA Fees : Gift Wrap | Other Charge Item |
 
 #### Financial Accounts
 
@@ -194,7 +197,7 @@ Create or identify accounts for settlement reconciliation:
 
 | Component | Count | Description |
 |-----------|-------|-------------|
-| Custom Records | 7 | Configuration, Order Map, Item Map, Settlement, Return Map, Error Queue, Integration Log |
+| Custom Records | 9 | Configuration, Order Map, Item Map, Settlement, Return Map, Error Queue, Integration Log, Column Item Mapping, Charge Account Map |
 | Custom Lists | Several | Enumerations for statuses and types |
 | Scheduled Scripts | 7 | Order, Inventory, Settlement, Return, Pricing, Catalog sync + Error Retry |
 | Map/Reduce Scripts | 4 | Order Import, Inventory Export, Settlement Processing, Return Processing |
@@ -304,6 +307,112 @@ Create **Amazon Item Mapping** records to link Amazon SKUs to NetSuite items:
 | Configuration | Link to the marketplace config |
 
 > **Note:** If no item mapping exists, the connector will attempt to resolve items by matching the Amazon SKU against NetSuite item Name, UPC, or External ID.
+
+### 4. Configure Fee Mapping (Replaces Amazon SKU Table)
+
+The legacy connector used a single **Amazon SKU Table** custom record to map Amazon fee/charge type names (e.g., Commission, FBAPerUnitFulfillmentFee, GiftWrap) to NetSuite items, with separate columns for each marketplace (US, CA, MX).
+
+In v2.0, this is replaced by two more flexible mechanisms. You can use either or both depending on your reporting needs.
+
+#### Option A: Column Item Mapping (Closest to Legacy SKU Table)
+
+Use this when you want fee types represented as **line items** on journal entries and/or sales orders — ideal for item-based reporting.
+
+1. Go to **Lists** > **Custom** > **Amazon Column Item Mapping** > **New**
+2. Create one record for each Amazon fee type per marketplace:
+
+| Field | Value | Example |
+|-------|-------|---------|
+| **Amazon Column Name** | The Amazon fee/charge name (case-insensitive match) | `Commission` |
+| **NetSuite Item** | The Other Charge Item to use | `FBA Fees : Commission` |
+| **Use in Orders** | Check if this mapping applies to order creation | Unchecked |
+| **Use in Settlements** | Check if this mapping applies to settlement JE creation | Checked |
+| **Configuration** | The marketplace config this mapping belongs to | `Amazon US Config` |
+
+**Example mappings** (create one set per marketplace configuration):
+
+| Amazon Column Name | NetSuite Item | Use in Orders | Use in Settlements |
+|--------------------|---------------|:-------------:|:------------------:|
+| Commission | FBA Fees : Commission | No | Yes |
+| DigitalServicesFee | FBA Fees : Fulfillment | No | Yes |
+| ExportCharge | FBA Fees : Fulfillment | No | Yes |
+| FBAPerUnitFulfillmentFee | FBA Fees : Fulfillment | No | Yes |
+| GiftWrap | FBA Fees : Gift Wrap | No | Yes |
+| GiftWrapChargeback | FBA Fees : Gift Wrap | No | Yes |
+| ShippingChargeback | Amazon Shipping Charge | No | Yes |
+| ShippingHB | Amazon Shipping Charge | No | Yes |
+
+> **Important:** Create a separate set of mappings for each marketplace configuration (e.g., US, CA, MX). Each record's **Configuration** field links it to the appropriate marketplace, replacing the old per-marketplace columns.
+
+**Enable on the config record:**
+- Check **Use Column Mapping for Settlements** (`custrecord_amz_cfg_col_map_settle`)
+- Optionally check **Use Column Mapping for Orders** (`custrecord_amz_cfg_col_map_orders`)
+
+#### Option B: Charge Account Mapping (Direct GL Routing)
+
+Use this when you want to route fees directly to **GL accounts** without creating item records — simpler for pure accounting/reconciliation.
+
+1. Go to **Lists** > **Custom** > **Amazon Charge Account Map** > **New**
+2. Create one record for each charge type:
+
+| Field | Value | Example |
+|-------|-------|---------|
+| **Charge Description** | Amazon charge name to match | `Commission` |
+| **GL Account** | NetSuite GL account to debit/credit | `Amazon Selling Fees` |
+| **Currency** | Optional: only apply for this currency | `USD` |
+| **Configuration** | Optional: link to specific marketplace config | `Amazon US Config` |
+| **Default Fallback Account** | Optional: fallback when no specific match found | `Amazon Other Fees` |
+
+**Example mappings:**
+
+| Charge Description | GL Account | Currency |
+|--------------------|-----------|----------|
+| Commission | Amazon Selling Fees | (blank = all) |
+| FBAPerUnitFulfillmentFee | FBA Fulfillment Expense | (blank) |
+| DigitalServicesFee | FBA Fulfillment Expense | (blank) |
+| ExportCharge | FBA Fulfillment Expense | (blank) |
+| GiftWrap | Gift Wrap Expense | (blank) |
+
+**Enable on the config record:**
+- Check **Use Charge Account Mapping** (`custrecord_amz_cfg_use_charge_map`)
+
+> **Note:** When both options are enabled, Charge Account Mapping takes priority over Column Item Mapping for settlement journal entries.
+
+#### Which Approach Should I Use?
+
+| Criteria | Column Item Mapping | Charge Account Mapping |
+|----------|:-------------------:|:----------------------:|
+| Item-based reporting on JEs | Yes | No |
+| Migrating from legacy SKU Table | Best fit | - |
+| Works for both orders and settlements | Yes | Settlements only |
+| Simpler setup (no item records needed) | - | Yes |
+| Per-currency account routing | - | Yes |
+| Can be combined | Yes | Yes |
+
+#### Migrating from the Legacy Amazon SKU Table
+
+If you are upgrading from the old connector that used `customrecord_amazon_sku_table`:
+
+1. For each row in your old SKU Table, create **one Column Item Mapping record per marketplace**
+2. The old **Name** field maps to the new **Amazon Column Name** field
+3. The old per-marketplace item columns (US Item, CA Item, MX Item) become separate records, each linked to its respective marketplace **Configuration**
+
+**Example:** The old SKU Table row:
+
+| Name | US Item | CA Item | MX Item |
+|------|---------|---------|---------|
+| Commission | FBA Fees : Commission | FBA Fees : Commission (CA) | FBA Fees : Commission (MX) |
+
+Becomes **three** Column Item Mapping records:
+
+| Amazon Column Name | NetSuite Item | Configuration |
+|--------------------|---------------|---------------|
+| Commission | FBA Fees : Commission | Amazon US Config |
+| Commission | FBA Fees : Commission (CA) | Amazon CA Config |
+| Commission | FBA Fees : Commission (MX) | Amazon MX Config |
+
+4. Enable **Use Column Mapping for Settlements** on each marketplace config
+5. The old SKU Table record can be deactivated — it is not used by v2.0 code
 
 ---
 
@@ -436,6 +545,8 @@ src/
 | **Return Map** | `customrecord_amz_return_map` | Amazon return <-> NetSuite RMA/credit memo mapping |
 | **Error Queue** | `customrecord_amz_error_queue` | Failed operations queued for automatic retry |
 | **Integration Log** | `customrecord_amz_integration_log` | Audit trail of all sync operations |
+| **Column Item Mapping** | `customrecord_amz_column_item_map` | Maps Amazon fee/column names to NetSuite items for orders and settlements |
+| **Charge Account Map** | `customrecord_amz_charge_map` | Maps Amazon charge descriptions to GL accounts for settlement journal entries |
 
 ---
 
