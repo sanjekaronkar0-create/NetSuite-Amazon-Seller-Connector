@@ -10,6 +10,7 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
     const CR = constants.CUSTOM_RECORDS.CONFIG;
     const CIM = constants.CUSTOM_RECORDS.COLUMN_ITEM_MAP;
     const MKT = constants.CUSTOM_RECORDS.MARKETPLACE_CFG;
+    const CHG = constants.CUSTOM_RECORDS.CHARGE_MAP;
     const isOneWorld = runtime.isFeatureInEffect({ feature: 'SUBSIDIARIES' });
 
     /**
@@ -206,7 +207,11 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
             cancelAction: result.getValue(CR.FIELDS.CANCEL_ACTION) || 'close',
             // Column-Item Mapping Usage Scope
             colMapOrders: result.getValue(CR.FIELDS.COL_MAP_ORDERS),
-            colMapSettle: result.getValue(CR.FIELDS.COL_MAP_SETTLE)
+            colMapSettle: result.getValue(CR.FIELDS.COL_MAP_SETTLE),
+            // Settlement Transaction Configuration
+            settleTranType: result.getValue(CR.FIELDS.SETTLE_TRAN_TYPE) || constants.SETTLEMENT_TRAN_TYPE.DEPOSIT,
+            jeGrouping: result.getValue(CR.FIELDS.JE_GROUPING) || constants.JE_GROUPING.PER_SETTLEMENT,
+            useChargeMap: result.getValue(CR.FIELDS.USE_CHARGE_MAP)
         };
     }
 
@@ -285,7 +290,11 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
             cancelAction: getValue(CR.FIELDS.CANCEL_ACTION) || 'close',
             // Column-Item Mapping Usage Scope
             colMapOrders: getValue(CR.FIELDS.COL_MAP_ORDERS),
-            colMapSettle: getValue(CR.FIELDS.COL_MAP_SETTLE)
+            colMapSettle: getValue(CR.FIELDS.COL_MAP_SETTLE),
+            // Settlement Transaction Configuration
+            settleTranType: getValue(CR.FIELDS.SETTLE_TRAN_TYPE) || constants.SETTLEMENT_TRAN_TYPE.DEPOSIT,
+            jeGrouping: getValue(CR.FIELDS.JE_GROUPING) || constants.JE_GROUPING.PER_SETTLEMENT,
+            useChargeMap: getValue(CR.FIELDS.USE_CHARGE_MAP)
         };
     }
 
@@ -479,6 +488,73 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
         return resolved;
     }
 
+    /**
+     * Loads Amazon Charge Account Map records and returns a lookup map.
+     * Maps lowercase charge description to GL account internal ID.
+     * Supports optional currency and config filtering (like old customrecord_amazon_other_charge).
+     * @param {string|number} [configId] - Optional config ID to filter by
+     * @param {string} [currency] - Optional currency code to filter by
+     * @returns {Object} { map: {chargeName: accountId}, defaultAccount: accountId|null }
+     */
+    function getChargeAccountMap(configId, currency) {
+        var chargeMap = {};
+        var defaultAccount = null;
+        var filters = [['isinactive', 'is', 'F']];
+
+        // Filter by config or global (no config set)
+        if (configId) {
+            filters.push('AND');
+            filters.push([
+                [CHG.FIELDS.CONFIG, 'anyof', configId],
+                'OR',
+                [CHG.FIELDS.CONFIG, 'anyof', '@NONE@']
+            ]);
+        }
+
+        search.create({
+            type: CHG.ID,
+            filters: filters,
+            columns: [CHG.FIELDS.CHARGE_NAME]
+        }).run().each(function (result) {
+            var chargeName = (result.getValue(CHG.FIELDS.CHARGE_NAME) || '').toLowerCase().trim();
+            if (!chargeName) return true;
+
+            try {
+                var looked = search.lookupFields({
+                    type: CHG.ID,
+                    id: result.id,
+                    columns: [CHG.FIELDS.ACCOUNT, CHG.FIELDS.CURRENCY, CHG.FIELDS.DEFAULT_ACCOUNT]
+                });
+
+                var accountVal = extractLookupValue(looked[CHG.FIELDS.ACCOUNT]);
+                var currencyVal = extractLookupValue(looked[CHG.FIELDS.CURRENCY]);
+                var defaultAcctVal = extractLookupValue(looked[CHG.FIELDS.DEFAULT_ACCOUNT]);
+
+                // If currency filter is set on the record, only use it for matching currency
+                if (currencyVal && currency) {
+                    // Currency record value is an internal ID; compare with provided currency
+                    // Skip this mapping if currencies don't match
+                    if (String(currencyVal) !== String(currency)) return true;
+                }
+
+                if (accountVal && chargeName) {
+                    chargeMap[chargeName] = accountVal;
+                }
+
+                // Capture default fallback account if present
+                if (defaultAcctVal && !defaultAccount) {
+                    defaultAccount = defaultAcctVal;
+                }
+            } catch (e) {
+                log.debug({ title: 'getChargeAccountMap', details: 'lookupFields error: ' + e.message });
+            }
+
+            return true;
+        });
+
+        return { map: chargeMap, defaultAccount: defaultAccount };
+    }
+
     return {
         getAllConfigs,
         getConfig,
@@ -487,6 +563,7 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
         getColumnItemMap,
         getMarketplaceConfigs,
         getMarketplaceConfig,
-        resolveMarketplaceSettings
+        resolveMarketplaceSettings,
+        getChargeAccountMap
     };
 });

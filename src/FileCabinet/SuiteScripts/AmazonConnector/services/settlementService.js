@@ -51,7 +51,7 @@ define([
      */
     function parseSettlementData(rawData) {
         const lines = rawData.split('\n');
-        if (lines.length < 2) return { rows: [], summary: {}, columnAmounts: {} };
+        if (lines.length < 2) return { rows: [], summary: {}, columnAmounts: {}, rowsByMonth: {} };
 
         const headers = lines[0].split('\t').map(h => h.trim());
         const rows = [];
@@ -67,6 +67,8 @@ define([
         };
         // Track amounts per column name for column-item mapping
         const columnAmounts = {};
+        // Track rows grouped by month for BY_MONTH JE grouping
+        const rowsByMonth = {};
 
         for (let i = 1; i < lines.length; i++) {
             if (!lines[i].trim()) continue;
@@ -80,9 +82,48 @@ define([
 
             categorizeAmount(row, summary);
             trackColumnAmount(row, columnAmounts);
+            groupRowByMonth(row, rowsByMonth);
         }
 
-        return { rows, summary, columnAmounts };
+        return { rows, summary, columnAmounts, rowsByMonth };
+    }
+
+    /**
+     * Groups a settlement row by its posting month (YYYY-MM).
+     * Used for the BY_MONTH JE grouping option (ported from old NES_ARES_sch_settlement_charges.js).
+     * @param {Object} row - Parsed settlement row
+     * @param {Object} rowsByMonth - Map of YYYY-MM to { rows: [], date: Date, columnAmounts: {} }
+     */
+    function groupRowByMonth(row, rowsByMonth) {
+        var amount = parseFloat(row['amount'] || row['total'] || 0);
+        if (amount === 0) return;
+
+        // Determine posting date from row
+        var dateStr = row['posted-date'] || row['deposit-date'] || row['date'] || '';
+        var monthKey = 'unknown';
+        var postDate = null;
+
+        if (dateStr) {
+            postDate = new Date(dateStr);
+            if (!isNaN(postDate.getTime())) {
+                var m = postDate.getMonth() + 1;
+                monthKey = postDate.getFullYear() + '-' + (m < 10 ? '0' + m : m);
+            }
+        }
+
+        if (!rowsByMonth[monthKey]) {
+            rowsByMonth[monthKey] = { rows: [], date: postDate, columnAmounts: {} };
+        }
+        rowsByMonth[monthKey].rows.push(row);
+
+        // Also track column amounts per month
+        var colName = (row['amount-description'] || row['description'] || row['amount-type'] || row['type'] || '').toLowerCase().trim();
+        if (colName) {
+            if (!rowsByMonth[monthKey].columnAmounts[colName]) {
+                rowsByMonth[monthKey].columnAmounts[colName] = 0;
+            }
+            rowsByMonth[monthKey].columnAmounts[colName] += amount;
+        }
     }
 
     /**

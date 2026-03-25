@@ -27,6 +27,7 @@
       <object>customrecord_amz_settlement</object>
       <object>customrecord_amz_return_map</object>
       <object>customrecord_amz_error_queue</object>
+      <object>customrecord_amz_charge_map</object>
       <object>customscript_amz_ss_order_sync</object>
       <object>customscript_amz_mr_order_import</object>
       <object>customscript_amz_ss_inv_sync</object>

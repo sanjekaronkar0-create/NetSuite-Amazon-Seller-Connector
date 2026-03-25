@@ -96,12 +96,27 @@
       <description>Linked NetSuite deposit/journal entry</description>
     </customrecordcustomfield>
 
+    <customrecordcustomfield scriptid="custrecord_amz_stl_ns_invoice">
+      <label>NetSuite Invoice</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>-4</selectrecordtype>
+      <displaytype>NORMAL</displaytype>
+      <description>Linked NetSuite invoice (when settlement creates invoices instead of deposits)</description>
+    </customrecordcustomfield>
+
     <customrecordcustomfield scriptid="custrecord_amz_stl_ns_journal">
       <label>NetSuite Journal Entry</label>
       <fieldtype>SELECT</fieldtype>
       <selectrecordtype>-30</selectrecordtype>
       <displaytype>NORMAL</displaytype>
       <description>Linked NetSuite journal entry for fee reconciliation</description>
+    </customrecordcustomfield>
+
+    <customrecordcustomfield scriptid="custrecord_amz_stl_ns_journals">
+      <label>NetSuite Journal Entry IDs</label>
+      <fieldtype>CLOBTEXT</fieldtype>
+      <displaytype>NORMAL</displaytype>
+      <description>Comma-separated list of JE IDs when split by month</description>
     </customrecordcustomfield>
 
     <customrecordcustomfield scriptid="custrecord_amz_stl_status">
