@@ -43,8 +43,7 @@ define([
 
         // If no explicit data, find all unreconciled settlements
         return {
-            type: 'search',
-            id: null,
+            type: constants.CUSTOM_RECORDS.SETTLEMENT.ID,
             filters: [
                 [constants.CUSTOM_RECORDS.SETTLEMENT.FIELDS.STATUS, 'anyof',
                     [constants.SETTLEMENT_STATUS.PENDING, constants.SETTLEMENT_STATUS.PROCESSING]]
@@ -62,8 +61,7 @@ define([
                 constants.CUSTOM_RECORDS.SETTLEMENT.FIELDS.CONFIG,
                 constants.CUSTOM_RECORDS.SETTLEMENT.FIELDS.START_DATE,
                 constants.CUSTOM_RECORDS.SETTLEMENT.FIELDS.END_DATE
-            ],
-            type: constants.CUSTOM_RECORDS.SETTLEMENT.ID
+            ]
         };
     }
 
