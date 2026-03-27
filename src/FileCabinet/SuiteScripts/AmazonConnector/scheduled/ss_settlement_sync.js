@@ -24,27 +24,51 @@ define([
         try {
             const configs = configHelper.getAllConfigs();
 
+            logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                'Settlement Sync: Found ' + configs.length + ' config(s) to evaluate');
+
             for (const config of configs) {
-                if (!config.settleEnabled) continue;
+                if (!config.settleEnabled) {
+                    logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                        'Settlement Sync: Skipping config ' + config.configId + ' - settleEnabled is false');
+                    continue;
+                }
 
                 try {
                     const lastSync = config.lastSettleSync
                         ? new Date(config.lastSettleSync).toISOString()
                         : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
+                    logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                        'Settlement Sync: Processing config ' + config.configId +
+                        '. Fetching reports since ' + lastSync);
+
                     const reports = settlementService.fetchSettlementReports(config, lastSync);
+
+                    logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                        'Settlement Sync: Config ' + config.configId + ' - ' + reports.length +
+                        ' report(s) returned from Amazon. Filtering for unprocessed DONE reports...');
 
                     // Filter to unprocessed, ready reports
                     var readyReports = [];
                     for (var r = 0; r < reports.length; r++) {
-                        if (reports[r].processingStatus === 'DONE' &&
-                            !settlementService.isSettlementProcessed(reports[r].reportId)) {
-                            readyReports.push(reports[r]);
+                        if (reports[r].processingStatus !== 'DONE') {
+                            logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                                'Settlement Sync: Report ' + reports[r].reportId + ' skipped - processingStatus is "' +
+                                reports[r].processingStatus + '" (not DONE yet)');
+                            continue;
                         }
+                        if (settlementService.isSettlementProcessed(reports[r].reportId)) {
+                            // isSettlementProcessed already logs
+                            continue;
+                        }
+                        readyReports.push(reports[r]);
                     }
 
                     if (readyReports.length === 0) {
-                        log.debug({ title: 'Settlement Sync', details: 'No new settlement reports for config ' + config.configId });
+                        logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                            'Settlement Sync: No new settlement reports to process for config ' + config.configId +
+                            '. All reports are either not DONE or already reconciled.');
                         configHelper.updateLastSync(config.configId, CR.FIELDS.LAST_SETTLE_SYNC);
                         continue;
                     }
