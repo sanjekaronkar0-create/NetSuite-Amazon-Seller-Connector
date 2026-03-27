@@ -84,8 +84,17 @@ define([
             if (values.columnAmounts) settlementData.columnAmounts = values.columnAmounts;
             if (values.rowsByMonth) settlementData.rowsByMonth = values.rowsByMonth;
 
+            var configValue = values[STL.CONFIG] ? values[STL.CONFIG].value || values[STL.CONFIG] : null;
+            if (!configValue) {
+                logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                    'Settlement ' + (settlementData.reportId || result.id) + ' has no config assigned, skipping.', {
+                    details: 'Settlement ID: ' + result.id
+                });
+                return;
+            }
+
             context.write({
-                key: values[STL.CONFIG] ? values[STL.CONFIG].value || values[STL.CONFIG] : 'unknown',
+                key: configValue,
                 value: JSON.stringify(settlementData)
             });
         } catch (e) {
