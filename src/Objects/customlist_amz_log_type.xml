@@ -21,5 +21,32 @@
     <customvalue scriptid="custrecord_amz_log_type_6">
       <value>API Call</value>
     </customvalue>
+    <customvalue scriptid="custrecord_amz_log_type_7">
+      <value>Pricing Sync</value>
+    </customvalue>
+    <customvalue scriptid="custrecord_amz_log_type_8">
+      <value>Catalog Sync</value>
+    </customvalue>
+    <customvalue scriptid="custrecord_amz_log_type_9">
+      <value>Error Retry</value>
+    </customvalue>
+    <customvalue scriptid="custrecord_amz_log_type_10">
+      <value>Financial Recon</value>
+    </customvalue>
+    <customvalue scriptid="custrecord_amz_log_type_11">
+      <value>Notification</value>
+    </customvalue>
+    <customvalue scriptid="custrecord_amz_log_type_12">
+      <value>FBA Inventory</value>
+    </customvalue>
+    <customvalue scriptid="custrecord_amz_log_type_13">
+      <value>Cancellation</value>
+    </customvalue>
+    <customvalue scriptid="custrecord_amz_log_type_14">
+      <value>Data Archival</value>
+    </customvalue>
+    <customvalue scriptid="custrecord_amz_log_type_15">
+      <value>Feed Tracking</value>
+    </customvalue>
   </customvalues>
 </customlist>
