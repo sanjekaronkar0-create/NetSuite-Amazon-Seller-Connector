@@ -23,8 +23,17 @@ define([
      * @returns {Array<Object>} Settlement report list
      */
     function fetchSettlementReports(config, startDate) {
+        logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+            'settlementService.fetchSettlementReports: Fetching settlement reports from Amazon for config ' +
+            config.configId + ' since ' + startDate);
+
         const response = amazonClient.getSettlementReports(config, startDate);
-        return response.reports || [];
+        var reports = response.reports || [];
+
+        logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+            'settlementService.fetchSettlementReports: Amazon returned ' + reports.length + ' report(s) for config ' + config.configId);
+
+        return reports;
     }
 
     /**
@@ -34,13 +43,27 @@ define([
      * @returns {Object} Parsed settlement data
      */
     function downloadSettlementReport(config, reportDocumentId) {
+        logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+            'settlementService.downloadSettlementReport: Fetching report document URL from Amazon for reportDocumentId: ' + reportDocumentId);
+
         const docResponse = amazonClient.getReportDocument(config, reportDocumentId);
         const downloadUrl = docResponse.url;
 
+        logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+            'settlementService.downloadSettlementReport: Downloading settlement report file...');
+
         const fileResponse = https.get({ url: downloadUrl });
         if (fileResponse.code !== 200) {
+            logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                'settlementService.downloadSettlementReport: Download FAILED with HTTP ' + fileResponse.code +
+                ' for reportDocumentId: ' + reportDocumentId);
             throw new Error('Failed to download settlement report: HTTP ' + fileResponse.code);
         }
+
+        logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+            'settlementService.downloadSettlementReport: Report downloaded successfully (' +
+            (fileResponse.body ? fileResponse.body.length : 0) + ' bytes). Parsing data...');
+
         return parseSettlementData(fileResponse.body);
     }
 
@@ -51,7 +74,15 @@ define([
      */
     function parseSettlementData(rawData) {
         const lines = rawData.split('\n');
-        if (lines.length < 2) return { rows: [], summary: {}, columnAmounts: {}, rowsByMonth: {} };
+        if (lines.length < 2) {
+            logger.warn(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                'settlementService.parseSettlementData: Report has less than 2 lines (' + lines.length +
+                ' line(s)). Returning empty data - the report file may be empty or malformed.');
+            return { rows: [], summary: {}, columnAmounts: {}, rowsByMonth: {} };
+        }
+
+        logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+            'settlementService.parseSettlementData: Parsing ' + lines.length + ' line(s) from settlement report');
 
         const headers = lines[0].split('\t').map(h => h.trim());
         const rows = [];
@@ -84,6 +115,19 @@ define([
             trackColumnAmount(row, columnAmounts);
             groupRowByMonth(row, rowsByMonth);
         }
+
+        logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+            'settlementService.parseSettlementData: Parsing complete. Rows: ' + rows.length +
+            ', Summary - totalAmount: ' + summary.totalAmount +
+            ', productCharges: ' + summary.productCharges +
+            ', shippingCredits: ' + summary.shippingCredits +
+            ', sellingFees: ' + summary.sellingFees +
+            ', fbaFees: ' + summary.fbaFees +
+            ', promoRebates: ' + summary.promoRebates +
+            ', otherFees: ' + summary.otherFees +
+            ', refunds: ' + summary.refunds +
+            ', unique columns: ' + Object.keys(columnAmounts).length +
+            ', months: ' + Object.keys(rowsByMonth).join(', '));
 
         return { rows, summary, columnAmounts, rowsByMonth };
     }
@@ -191,6 +235,11 @@ define([
             found = true;
             return false;
         });
+
+        logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+            'settlementService.isSettlementProcessed: Report ' + reportId +
+            (found ? ' has already been RECONCILED - will be skipped' : ' has NOT been reconciled yet - eligible for processing'));
+
         return found;
     }
 
@@ -210,6 +259,12 @@ define([
             existingId = result.id;
             return false;
         });
+
+        logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+            'settlementService.findExistingSettlement: Report ' + reportId +
+            (existingId ? ' - found existing settlement record (ID: ' + existingId + '). Will reuse instead of creating new.' :
+                ' - no existing settlement record found. A new one will be created.'));
+
         return existingId;
     }
 
@@ -221,6 +276,12 @@ define([
      * @returns {number} Settlement record internal ID
      */
     function createSettlementRecord(config, report, summary) {
+        logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+            'settlementService.createSettlementRecord: Creating settlement record for report ' + (report.reportId || 'Unknown') +
+            '. Config: ' + config.configId +
+            ', dateRange: ' + (report.dataStartTime || 'N/A') + ' to ' + (report.dataEndTime || 'N/A') +
+            ', totalAmount: ' + (summary.totalAmount || 0));
+
         const rec = record.create({ type: STL.ID });
         rec.setValue({ fieldId: 'name', value: 'Settlement: ' + (report.reportId || 'Unknown') });
         rec.setValue({ fieldId: STL.FIELDS.REPORT_ID, value: report.reportId });
@@ -243,7 +304,13 @@ define([
         rec.setValue({ fieldId: STL.FIELDS.OTHER_FEES, value: summary.otherFees || 0 });
         rec.setValue({ fieldId: STL.FIELDS.REFUNDS, value: summary.refunds || 0 });
 
-        return rec.save({ ignoreMandatoryFields: true });
+        var savedId = rec.save({ ignoreMandatoryFields: true });
+
+        logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+            'settlementService.createSettlementRecord: Settlement record created (ID: ' + savedId +
+            ') for report ' + (report.reportId || 'Unknown'));
+
+        return savedId;
     }
 
     /**

@@ -25,6 +25,14 @@ define([
      * @returns {number} Invoice record ID
      */
     function createInvoice(config, settlement, summary) {
+        logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+            'financialService.createInvoice: Starting invoice creation for settlement ' + settlement.reportId +
+            '. Customer: ' + (config.customer || 'NOT SET') +
+            ', subsidiary: ' + (config.subsidiary || 'NOT SET') +
+            ', invoiceForm: ' + (config.invoiceForm || 'default') +
+            ', productCharges: ' + (summary.productCharges || 0) +
+            ', shippingCredits: ' + (summary.shippingCredits || 0));
+
         const inv = record.create({
             type: record.Type.INVOICE,
             isDynamic: true
@@ -33,6 +41,10 @@ define([
         // Set header fields
         if (config.customer) {
             inv.setValue({ fieldId: 'entity', value: config.customer });
+        } else {
+            logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
+                'financialService.createInvoice: No customer configured. Invoice for settlement ' + settlement.reportId +
+                ' will not have an entity set, which may cause save failure.');
         }
         if (config.subsidiary) {
             inv.setValue({ fieldId: 'subsidiary', value: config.subsidiary });
@@ -58,12 +70,32 @@ define([
         });
 
         // Add line for product charges (net settlement amount)
+        var invoiceLineCount = 0;
         if (summary.productCharges) {
             addInvoiceLine(inv, config, 'Product Charges', Math.abs(summary.productCharges));
+            invoiceLineCount++;
+        } else {
+            logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                'financialService.createInvoice: No product charges line added for settlement ' + settlement.reportId +
+                ' (productCharges is 0 or empty)');
         }
         if (summary.shippingCredits) {
             addInvoiceLine(inv, config, 'Shipping Credits', Math.abs(summary.shippingCredits));
+            invoiceLineCount++;
+        } else {
+            logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                'financialService.createInvoice: No shipping credits line added for settlement ' + settlement.reportId +
+                ' (shippingCredits is 0 or empty)');
         }
+
+        if (invoiceLineCount === 0) {
+            logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
+                'financialService.createInvoice: Invoice for settlement ' + settlement.reportId +
+                ' has NO line items. This may indicate the settlement report had no product charges or shipping credits.');
+        }
+
+        logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+            'financialService.createInvoice: Saving invoice with ' + invoiceLineCount + ' line(s) for settlement ' + settlement.reportId);
 
         const invId = inv.save({ ignoreMandatoryFields: true });
 
@@ -102,6 +134,12 @@ define([
      * @returns {number} Deposit record ID
      */
     function createDeposit(config, settlement, summary) {
+        logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+            'financialService.createDeposit: Starting deposit creation for settlement ' + settlement.reportId +
+            '. settleAccount: ' + (config.settleAccount || 'NOT SET') +
+            ', subsidiary: ' + (config.subsidiary || 'NOT SET') +
+            ', totalAmount: ' + (summary.totalAmount || 0));
+
         const deposit = record.create({
             type: record.Type.DEPOSIT,
             isDynamic: true
@@ -167,6 +205,14 @@ define([
      * @returns {number} Journal Entry ID
      */
     function createFeeJournalEntry(config, settlement, summary, columnAmounts, chargeAccountMap) {
+        logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+            'financialService.createFeeJournalEntry: Starting JE creation for settlement ' + settlement.reportId +
+            '. feeAccount: ' + (config.feeAccount || 'NOT SET') +
+            ', fbaFeeAccount: ' + (config.fbaFeeAccount || 'NOT SET') +
+            ', promoAccount: ' + (config.promoAccount || 'NOT SET') +
+            ', colMapSettle: ' + (config.colMapSettle || false) +
+            ', columnAmounts available: ' + (columnAmounts ? Object.keys(columnAmounts).length + ' column(s)' : 'NO'));
+
         const je = record.create({
             type: record.Type.JOURNAL_ENTRY,
             isDynamic: true
@@ -193,11 +239,28 @@ define([
 
         if (useColumnMapping && columnAmounts) {
             columnItemMap = configHelper.getColumnItemMap(config.configId, { useInSettle: true });
+            logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                'financialService.createFeeJournalEntry: Column-item mapping enabled. Loaded ' +
+                (columnItemMap ? Object.keys(columnItemMap).length : 0) + ' mapping(s)');
         }
 
         // Charge Account Map lookup (from customrecord_amz_charge_map, like old customrecord_amazon_other_charge)
         var chargeMap = (chargeAccountMap && chargeAccountMap.map) ? chargeAccountMap.map : null;
         var chargeDefaultAcct = (chargeAccountMap && chargeAccountMap.defaultAccount) ? chargeAccountMap.defaultAccount : null;
+
+        // Log which JE line strategy will be used
+        if (chargeMap && Object.keys(chargeMap).length > 0 && columnAmounts) {
+            logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                'financialService.createFeeJournalEntry: Using CHARGE ACCOUNT MAP strategy for JE lines (settlement ' + settlement.reportId + ')');
+        } else if (columnItemMap && Object.keys(columnItemMap).length > 0 && columnAmounts) {
+            logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                'financialService.createFeeJournalEntry: Using COLUMN-ITEM MAP strategy for JE lines (settlement ' + settlement.reportId + ')');
+        } else {
+            logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                'financialService.createFeeJournalEntry: Using SUMMARY-BASED (fallback) strategy for JE lines (settlement ' + settlement.reportId +
+                '). Fees - selling: ' + (summary.sellingFees || 0) + ', fba: ' + (summary.fbaFees || 0) +
+                ', promo: ' + (summary.promoRebates || 0) + ', other: ' + (summary.otherFees || 0));
+        }
 
         if (chargeMap && Object.keys(chargeMap).length > 0 && columnAmounts) {
             // Use charge account map for granular JE lines (ported from old NES_ARES_sch_settlement_charges.js lookupAcct logic)
@@ -257,6 +320,22 @@ define([
             // Fallback: account-based fee lines (original behavior)
 
             // Selling Fees (debit expense account)
+            if (summary.sellingFees && !config.feeAccount) {
+                logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
+                    'financialService.createFeeJournalEntry: Selling fees of ' + summary.sellingFees +
+                    ' exist but feeAccount is not configured - skipping selling fees line (settlement ' + settlement.reportId + ')');
+            }
+            if (summary.fbaFees && !config.fbaFeeAccount) {
+                logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
+                    'financialService.createFeeJournalEntry: FBA fees of ' + summary.fbaFees +
+                    ' exist but fbaFeeAccount is not configured - skipping FBA fees line (settlement ' + settlement.reportId + ')');
+            }
+            if (summary.promoRebates && !config.promoAccount) {
+                logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
+                    'financialService.createFeeJournalEntry: Promo rebates of ' + summary.promoRebates +
+                    ' exist but promoAccount is not configured - skipping promo rebates line (settlement ' + settlement.reportId + ')');
+            }
+
             if (summary.sellingFees && config.feeAccount) {
                 je.selectNewLine({ sublistId: 'line' });
                 je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'account', value: config.feeAccount });
@@ -302,9 +381,19 @@ define([
 
         // If no fee lines, skip JE creation
         if (lineIdx === 0) {
-            log.debug({ title: 'Financial Service', details: 'No fee lines to journal for settlement ' + settlement.reportId });
+            logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
+                'financialService.createFeeJournalEntry: No fee lines created for settlement ' + settlement.reportId +
+                '. JE will NOT be saved. Possible reasons: all fee amounts are 0, no matching accounts/items in mappings, ' +
+                'or fee accounts (feeAccount, fbaFeeAccount, promoAccount) are not configured.', {
+                configId: config.configId,
+                amazonRef: settlement.reportId
+            });
             return null;
         }
+
+        logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+            'financialService.createFeeJournalEntry: Created ' + lineIdx + ' fee line(s) for settlement ' + settlement.reportId +
+            '. Total debits: ' + Math.abs(totalDebits) + '. Adding balancing credit line.');
 
         // Credit line: settlement/clearing account (balancing entry)
         var balancingAccount = config.settleAccount || config.feeAccount;
@@ -486,6 +575,13 @@ define([
      */
     function updateSettlementFinancials(settlementId, options) {
         options = options || {};
+        logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+            'financialService.updateSettlementFinancials: Marking settlement ' + settlementId + ' as RECONCILED. ' +
+            'depositId: ' + (options.depositId || 'none') +
+            ', invoiceId: ' + (options.invoiceId || 'none') +
+            ', journalId: ' + (options.journalId || 'none') +
+            ', journalIds: ' + (options.journalIds && options.journalIds.length ? options.journalIds.join(',') : 'none'));
+
         const values = { [STL.FIELDS.STATUS]: constants.SETTLEMENT_STATUS.RECONCILED };
 
         if (options.depositId) values[STL.FIELDS.NS_DEPOSIT] = options.depositId;

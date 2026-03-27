@@ -23,14 +23,24 @@ define([
      * Parameter contains a File Cabinet file ID when triggered by scheduled script.
      */
     function getInputData() {
+        logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+            'Settlement MR getInputData: Starting input stage');
+
         const dataParam = runtime.getCurrentScript().getParameter({
             name: 'custscript_amz_mr_settle_data'
         });
 
         if (dataParam) {
+            logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                'Settlement MR getInputData: Reading data file (File Cabinet ID: ' + dataParam + ')');
+
             var fileData = mrDataHelper.readDataFile(dataParam);
             var configId = fileData.configId;
             var reports = fileData.reports || [];
+
+            logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                'Settlement MR getInputData: Found ' + reports.length +
+                ' report(s) for config ' + configId + ' from data file');
 
             // Embed configId in each report so map() can access it,
             // and return the array so MR iterates individual reports
@@ -42,6 +52,9 @@ define([
         }
 
         // If no explicit data, find all unreconciled settlements
+        logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+            'Settlement MR getInputData: No data file parameter found. Searching for unreconciled settlement records (PENDING/PROCESSING status)');
+
         return {
             type: constants.CUSTOM_RECORDS.SETTLEMENT.ID,
             filters: [
@@ -73,24 +86,54 @@ define([
             const STL = constants.CUSTOM_RECORDS.SETTLEMENT.FIELDS;
             const result = JSON.parse(context.value);
 
+            logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                'Settlement MR map: Processing entry' +
+                (result._fromFile ? ' (from file)' : ' (from search)') +
+                ' - Report ID: ' + (result.reportId || result.values?.[STL.REPORT_ID] || 'unknown'));
+
             // File-based data: report metadata from scheduled script
             // Download the report, parse it, create settlement record, then emit
             if (result._fromFile) {
                 var configId = result._configId;
                 if (!configId) {
                     logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                        'Report ' + (result.reportId || 'unknown') + ' has no config assigned, skipping.');
+                        'Settlement MR map: Report ' + (result.reportId || 'unknown') + ' has no config assigned, skipping. ' +
+                        'This means the data file did not contain a configId.');
                     return;
                 }
 
+                logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                    'Settlement MR map: Loading config ' + configId + ' for report ' + result.reportId);
+
                 var config = configHelper.getConfig(configId);
+
+                logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                    'Settlement MR map: Downloading settlement report from Amazon (reportDocumentId: ' + result.reportDocumentId + ')');
+
                 var parsed = settlementService.downloadSettlementReport(config, result.reportDocumentId);
 
+                logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                    'Settlement MR map: Report downloaded and parsed. Summary - totalAmount: ' + (parsed.summary.totalAmount || 0) +
+                    ', productCharges: ' + (parsed.summary.productCharges || 0) +
+                    ', sellingFees: ' + (parsed.summary.sellingFees || 0) +
+                    ', fbaFees: ' + (parsed.summary.fbaFees || 0) +
+                    ', rows parsed: ' + (parsed.rows ? parsed.rows.length : 0));
+
                 // Reuse existing settlement record if one exists from a prior failed run
+                logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                    'Settlement MR map: Checking if settlement record already exists for report ' + result.reportId);
+
                 var existingId = settlementService.findExistingSettlement(result.reportId);
-                var settlementId = existingId
-                    ? existingId
-                    : settlementService.createSettlementRecord(config, result, parsed.summary);
+                var settlementId;
+                if (existingId) {
+                    settlementId = existingId;
+                    logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                        'Settlement MR map: Reusing existing settlement record (ID: ' + existingId + ') from a prior run for report ' + result.reportId);
+                } else {
+                    settlementId = settlementService.createSettlementRecord(config, result, parsed.summary);
+                    logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                        'Settlement MR map: Created new settlement record (ID: ' + settlementId + ') for report ' + result.reportId);
+                }
 
                 // Strip raw rows from rowsByMonth — only columnAmounts and date
                 // are needed by reduce, and rows can push values over NetSuite's 10MB limit
@@ -122,6 +165,10 @@ define([
                     rowsByMonth: compactRowsByMonth
                 };
 
+                logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                    'Settlement MR map: Emitting settlement data to reduce stage. Key (configId): ' + configId +
+                    ', settlementId: ' + settlementId + ', reportId: ' + result.reportId);
+
                 context.write({
                     key: configId,
                     value: JSON.stringify(settlementData)
@@ -135,11 +182,16 @@ define([
             var configValue = values[STL.CONFIG] ? values[STL.CONFIG].value || values[STL.CONFIG] : null;
             if (!configValue) {
                 logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                    'Settlement ' + (values[STL.REPORT_ID] || result.id) + ' has no config assigned, skipping.', {
+                    'Settlement MR map: Settlement ' + (values[STL.REPORT_ID] || result.id) +
+                    ' has no config assigned, skipping. The settlement record is missing the config field reference.', {
                     details: 'Settlement ID: ' + result.id
                 });
                 return;
             }
+
+            logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                'Settlement MR map: Emitting search-based settlement (ID: ' + result.id +
+                ', reportId: ' + values[STL.REPORT_ID] + ') to reduce stage. Key (configId): ' + configValue);
 
             var searchSettlementData = {
                 settlementId: result.id,
@@ -177,6 +229,10 @@ define([
     function reduce(context) {
         const configId = context.key;
 
+        logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+            'Settlement MR reduce: Starting reduce for config ' + configId +
+            '. Number of settlements to process: ' + context.values.length);
+
         try {
             const config = configHelper.getConfig(configId);
 
@@ -185,14 +241,33 @@ define([
             const jeGrouping = config.jeGrouping || constants.JE_GROUPING.PER_SETTLEMENT;
             const useChargeMap = config.useChargeMap === true || config.useChargeMap === 'T';
 
+            logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                'Settlement MR reduce: Config ' + configId + ' settings - ' +
+                'tranType: ' + (settleTranType === constants.SETTLEMENT_TRAN_TYPE.INVOICE ? 'INVOICE' : 'DEPOSIT') +
+                ', jeGrouping: ' + (jeGrouping === constants.JE_GROUPING.BY_MONTH ? 'BY_MONTH' : 'PER_SETTLEMENT') +
+                ', useChargeMap: ' + useChargeMap +
+                ', autoDeposit: ' + (config.autoDeposit || false) +
+                ', settleAccount: ' + (config.settleAccount || 'NOT SET') +
+                ', feeAccount: ' + (config.feeAccount || 'NOT SET') +
+                ', customer: ' + (config.customer || 'NOT SET'));
+
             // Load charge account map if enabled
             let chargeAccountMap = null;
             if (useChargeMap) {
                 chargeAccountMap = configHelper.getChargeAccountMap(configId);
+                logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                    'Settlement MR reduce: Loaded charge account map with ' +
+                    (chargeAccountMap && chargeAccountMap.map ? Object.keys(chargeAccountMap.map).length : 0) +
+                    ' mapping(s), defaultAccount: ' + (chargeAccountMap && chargeAccountMap.defaultAccount ? chargeAccountMap.defaultAccount : 'NONE'));
             }
 
             for (const val of context.values) {
                 const settlement = JSON.parse(val);
+
+                logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                    'Settlement MR reduce: Processing settlement reportId: ' + settlement.reportId +
+                    ', settlementId: ' + settlement.settlementId +
+                    ', totalAmount: ' + settlement.totalAmount);
 
                 let summary = null;
                 try {
@@ -216,12 +291,40 @@ define([
                     if (settleTranType === constants.SETTLEMENT_TRAN_TYPE.INVOICE) {
                         // Invoice mode (like old NES_ARES_sch_amazon_invoices.js)
                         if (config.customer && summary.totalAmount) {
+                            logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                                'Settlement MR reduce: Creating INVOICE for settlement ' + settlement.reportId +
+                                '. Customer: ' + config.customer + ', totalAmount: ' + summary.totalAmount);
                             invoiceId = financialService.createInvoice(config, settlement, summary);
+                            logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                                'Settlement MR reduce: Invoice created (ID: ' + invoiceId + ') for settlement ' + settlement.reportId);
+                        } else {
+                            logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
+                                'Settlement MR reduce: Skipping invoice creation for settlement ' + settlement.reportId +
+                                '. Reason: ' + (!config.customer ? 'customer not configured on config' : '') +
+                                (!summary.totalAmount ? ((!config.customer ? ', ' : '') + 'totalAmount is 0 or empty') : ''), {
+                                configId: configId,
+                                amazonRef: settlement.reportId
+                            });
                         }
                     } else {
                         // Deposit mode (default, existing behavior)
                         if (config.autoDeposit && config.settleAccount && summary.totalAmount) {
+                            logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                                'Settlement MR reduce: Creating DEPOSIT for settlement ' + settlement.reportId +
+                                '. settleAccount: ' + config.settleAccount + ', totalAmount: ' + summary.totalAmount);
                             depositId = financialService.createDeposit(config, settlement, summary);
+                            logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                                'Settlement MR reduce: Deposit created (ID: ' + depositId + ') for settlement ' + settlement.reportId);
+                        } else {
+                            logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
+                                'Settlement MR reduce: Skipping deposit creation for settlement ' + settlement.reportId +
+                                '. Reason: ' +
+                                (!config.autoDeposit ? 'autoDeposit is disabled' : '') +
+                                (!config.settleAccount ? ((!config.autoDeposit ? ', ' : '') + 'settleAccount not configured') : '') +
+                                (!summary.totalAmount ? (((!config.autoDeposit || !config.settleAccount) ? ', ' : '') + 'totalAmount is 0 or empty') : ''), {
+                                configId: configId,
+                                amazonRef: settlement.reportId
+                            });
                         }
                     }
 
@@ -229,19 +332,55 @@ define([
                     var hasFees = summary.sellingFees || summary.fbaFees || summary.otherFees || summary.promoRebates;
                     var hasAccount = config.feeAccount || (chargeAccountMap && Object.keys(chargeAccountMap.map).length > 0);
 
+                    logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                        'Settlement MR reduce: Fee JE check for settlement ' + settlement.reportId +
+                        ' - sellingFees: ' + (summary.sellingFees || 0) +
+                        ', fbaFees: ' + (summary.fbaFees || 0) +
+                        ', otherFees: ' + (summary.otherFees || 0) +
+                        ', promoRebates: ' + (summary.promoRebates || 0) +
+                        ', hasFees: ' + !!hasFees +
+                        ', hasAccount: ' + !!hasAccount);
+
                     if (hasFees && hasAccount) {
                         if (jeGrouping === constants.JE_GROUPING.BY_MONTH && settlement.rowsByMonth) {
+                            var monthKeys = Object.keys(settlement.rowsByMonth);
+                            logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                                'Settlement MR reduce: Creating BY_MONTH fee JEs for settlement ' + settlement.reportId +
+                                '. Months found: ' + monthKeys.join(', '));
                             // Split JEs by month (like old NES_ARES_sch_settlement_charges.js)
                             journalIds = financialService.createFeeJournalEntriesByMonth(
                                 config, settlement, settlement.rowsByMonth, chargeAccountMap
                             );
+                            logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                                'Settlement MR reduce: Created ' + journalIds.length + ' monthly JE(s) for settlement ' + settlement.reportId +
+                                '. JE IDs: ' + journalIds.join(', '));
                         } else {
+                            logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                                'Settlement MR reduce: Creating single fee JE (PER_SETTLEMENT) for settlement ' + settlement.reportId +
+                                (settlement.columnAmounts ? '. Column amounts available for granular lines' : '. Using summary-based fee lines'));
                             // Single JE per settlement (default)
                             journalId = financialService.createFeeJournalEntry(
                                 config, settlement, summary, settlement.columnAmounts, chargeAccountMap
                             );
+                            logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                                'Settlement MR reduce: Fee JE ' + (journalId ? 'created (ID: ' + journalId + ')' : 'was NOT created (no fee lines)') +
+                                ' for settlement ' + settlement.reportId);
                         }
+                    } else {
+                        logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
+                            'Settlement MR reduce: Skipping fee JE creation for settlement ' + settlement.reportId +
+                            '. Reason: ' + (!hasFees ? 'no fees found in settlement' : 'no fee account configured'), {
+                            configId: configId,
+                            amazonRef: settlement.reportId
+                        });
                     }
+
+                    logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                        'Settlement MR reduce: Updating settlement record ' + settlement.settlementId + ' to RECONCILED status. ' +
+                        'depositId: ' + (depositId || 'none') +
+                        ', invoiceId: ' + (invoiceId || 'none') +
+                        ', journalId: ' + (journalId || 'none') +
+                        ', journalIds: ' + (journalIds.length ? journalIds.join(',') : 'none'));
 
                     // Update settlement record with all financial references
                     financialService.updateSettlementFinancials(settlement.settlementId, {
@@ -287,16 +426,43 @@ define([
     }
 
     function summarize(summary) {
-        log.audit({
-            title: 'MR Settlement Process - Summary',
-            details: 'Input errors: ' + (summary.inputSummary.error || 'none')
-        });
+        logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+            'Settlement MR summarize: Map/Reduce execution completed. Reviewing results...');
 
-        summary.reduceSummary.errors.iterator().each(function (key, error) {
-            logger.error(constants.LOG_TYPE.FINANCIAL_RECON,
-                'Reduce error for config ' + key + ': ' + error);
+        // Log input stage errors
+        if (summary.inputSummary.error) {
+            logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                'Settlement MR summarize: Input stage error: ' + summary.inputSummary.error);
+        } else {
+            logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                'Settlement MR summarize: Input stage completed successfully (no errors)');
+        }
+
+        // Log map stage errors
+        var mapErrorCount = 0;
+        summary.mapSummary.errors.iterator().each(function (key, error) {
+            mapErrorCount++;
+            logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                'Settlement MR summarize: Map error for key ' + key + ': ' + error);
             return true;
         });
+        logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+            'Settlement MR summarize: Map stage completed with ' + mapErrorCount + ' error(s)');
+
+        // Log reduce stage errors
+        var reduceErrorCount = 0;
+        summary.reduceSummary.errors.iterator().each(function (key, error) {
+            reduceErrorCount++;
+            logger.error(constants.LOG_TYPE.FINANCIAL_RECON,
+                'Settlement MR summarize: Reduce error for config ' + key + ': ' + error);
+            return true;
+        });
+        logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+            'Settlement MR summarize: Reduce stage completed with ' + reduceErrorCount + ' error(s)');
+
+        logger.success(constants.LOG_TYPE.SETTLEMENT_SYNC,
+            'Settlement MR summarize: Full execution finished. Map errors: ' + mapErrorCount +
+            ', Reduce errors: ' + reduceErrorCount);
     }
 
     return { getInputData, map, reduce, summarize };
