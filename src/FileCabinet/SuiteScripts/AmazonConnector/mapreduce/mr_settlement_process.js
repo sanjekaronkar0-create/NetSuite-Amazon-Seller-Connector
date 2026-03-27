@@ -28,13 +28,22 @@ define([
         });
 
         if (dataParam) {
-            return mrDataHelper.readDataFile(dataParam);
+            var fileData = mrDataHelper.readDataFile(dataParam);
+            var configId = fileData.configId;
+            var reports = fileData.reports || [];
+
+            // Embed configId in each report so map() can access it,
+            // and return the array so MR iterates individual reports
+            for (var i = 0; i < reports.length; i++) {
+                reports[i]._configId = configId;
+                reports[i]._fromFile = true;
+            }
+            return reports;
         }
 
         // If no explicit data, find all unreconciled settlements
         return {
-            type: 'search',
-            id: null,
+            type: constants.CUSTOM_RECORDS.SETTLEMENT.ID,
             filters: [
                 [constants.CUSTOM_RECORDS.SETTLEMENT.FIELDS.STATUS, 'anyof',
                     [constants.SETTLEMENT_STATUS.PENDING, constants.SETTLEMENT_STATUS.PROCESSING]]
@@ -52,8 +61,7 @@ define([
                 constants.CUSTOM_RECORDS.SETTLEMENT.FIELDS.CONFIG,
                 constants.CUSTOM_RECORDS.SETTLEMENT.FIELDS.START_DATE,
                 constants.CUSTOM_RECORDS.SETTLEMENT.FIELDS.END_DATE
-            ],
-            type: constants.CUSTOM_RECORDS.SETTLEMENT.ID
+            ]
         };
     }
 
@@ -64,9 +72,57 @@ define([
         try {
             const STL = constants.CUSTOM_RECORDS.SETTLEMENT.FIELDS;
             const result = JSON.parse(context.value);
+
+            // File-based data: report metadata from scheduled script
+            // Download the report, parse it, create settlement record, then emit
+            if (result._fromFile) {
+                var configId = result._configId;
+                if (!configId) {
+                    logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                        'Report ' + (result.reportId || 'unknown') + ' has no config assigned, skipping.');
+                    return;
+                }
+
+                var config = configHelper.getConfig(configId);
+                var parsed = settlementService.downloadSettlementReport(config, result.reportDocumentId);
+                var settlementId = settlementService.createSettlementRecord(config, result, parsed.summary);
+
+                var settlementData = {
+                    settlementId: settlementId,
+                    reportId: result.reportId,
+                    totalAmount: parsed.summary.totalAmount || 0,
+                    productCharges: parsed.summary.productCharges || 0,
+                    shippingCredits: parsed.summary.shippingCredits || 0,
+                    promoRebates: parsed.summary.promoRebates || 0,
+                    sellingFees: parsed.summary.sellingFees || 0,
+                    fbaFees: parsed.summary.fbaFees || 0,
+                    otherFees: parsed.summary.otherFees || 0,
+                    refunds: parsed.summary.refunds || 0,
+                    endDate: result.dataEndTime || null,
+                    columnAmounts: parsed.columnAmounts || null,
+                    rowsByMonth: parsed.rowsByMonth || null
+                };
+
+                context.write({
+                    key: configId,
+                    value: JSON.stringify(settlementData)
+                });
+                return;
+            }
+
+            // Search-based data: existing settlement records with NetSuite field IDs
             const values = result.values || result;
 
-            var settlementData = {
+            var configValue = values[STL.CONFIG] ? values[STL.CONFIG].value || values[STL.CONFIG] : null;
+            if (!configValue) {
+                logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                    'Settlement ' + (values[STL.REPORT_ID] || result.id) + ' has no config assigned, skipping.', {
+                    details: 'Settlement ID: ' + result.id
+                });
+                return;
+            }
+
+            var searchSettlementData = {
                 settlementId: result.id,
                 reportId: values[STL.REPORT_ID],
                 totalAmount: parseFloat(values[STL.TOTAL_AMOUNT]) || 0,
@@ -80,22 +136,13 @@ define([
                 endDate: values[STL.END_DATE]
             };
 
-            // Include parsed column amounts and month groupings if available from data file
-            if (values.columnAmounts) settlementData.columnAmounts = values.columnAmounts;
-            if (values.rowsByMonth) settlementData.rowsByMonth = values.rowsByMonth;
-
-            var configValue = values[STL.CONFIG] ? values[STL.CONFIG].value || values[STL.CONFIG] : null;
-            if (!configValue) {
-                logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                    'Settlement ' + (settlementData.reportId || result.id) + ' has no config assigned, skipping.', {
-                    details: 'Settlement ID: ' + result.id
-                });
-                return;
-            }
+            // Include parsed column amounts and month groupings if available
+            if (values.columnAmounts) searchSettlementData.columnAmounts = values.columnAmounts;
+            if (values.rowsByMonth) searchSettlementData.rowsByMonth = values.rowsByMonth;
 
             context.write({
                 key: configValue,
-                value: JSON.stringify(settlementData)
+                value: JSON.stringify(searchSettlementData)
             });
         } catch (e) {
             logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
