@@ -17,21 +17,23 @@ define([
 
     /**
      * Creates a NetSuite Invoice from Amazon settlement data.
-     * This is the configurable alternative to createDeposit(), ported from the
-     * old NES_ARES_sch_amazon_invoices.js logic into the new architecture.
+     * Adds fee lines directly on the invoice using Other Charge for Sale items
+     * mapped via column-item mappings (like old NES_ARES_sch_amazon_invoices.js updateInvoices).
      * @param {Object} config - Connector config with account mappings
      * @param {Object} settlement - Settlement record data
      * @param {Object} summary - Financial summary
+     * @param {Object} [columnAmounts] - Per-column amounts from settlement parsing
+     * @param {Object} [columnItemMap] - Map of lowercase column name to NetSuite item ID
      * @returns {number} Invoice record ID
      */
-    function createInvoice(config, settlement, summary) {
+    function createInvoice(config, settlement, summary, columnAmounts, columnItemMap) {
         logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
             'financialService.createInvoice: Starting invoice creation for settlement ' + settlement.reportId +
             '. Customer: ' + (config.customer || 'NOT SET') +
             ', subsidiary: ' + (config.subsidiary || 'NOT SET') +
             ', invoiceForm: ' + (config.invoiceForm || 'default') +
-            ', productCharges: ' + (summary.productCharges || 0) +
-            ', shippingCredits: ' + (summary.shippingCredits || 0));
+            ', columnAmounts: ' + (columnAmounts ? Object.keys(columnAmounts).length + ' entries' : 'NONE') +
+            ', columnItemMap: ' + (columnItemMap ? Object.keys(columnItemMap).length + ' mappings' : 'NONE'));
 
         const inv = record.create({
             type: record.Type.INVOICE,
@@ -69,29 +71,55 @@ define([
             value: settlement.reportId || ''
         });
 
-        // Add line for product charges (net settlement amount)
         var invoiceLineCount = 0;
-        if (summary.productCharges) {
-            addInvoiceLine(inv, config, 'Product Charges', Math.abs(summary.productCharges));
-            invoiceLineCount++;
+        var unmappedFees = {};
+
+        // Add fee lines using column-item mappings (Other Charge for Sale items)
+        // This matches the old process: each settlement fee description → mapped item → invoice line
+        if (columnAmounts && columnItemMap) {
+            for (var colName in columnAmounts) {
+                if (!columnAmounts.hasOwnProperty(colName)) continue;
+                var amount = columnAmounts[colName];
+                if (amount === 0) continue;
+
+                var itemId = columnItemMap[colName];
+                if (itemId) {
+                    inv.selectNewLine({ sublistId: 'item' });
+                    inv.setCurrentSublistValue({ sublistId: 'item', fieldId: 'item', value: itemId });
+                    inv.setCurrentSublistValue({ sublistId: 'item', fieldId: 'quantity', value: 1 });
+                    inv.setCurrentSublistValue({ sublistId: 'item', fieldId: 'amount', value: amount });
+                    inv.setCurrentSublistValue({ sublistId: 'item', fieldId: 'description', value: colName });
+                    inv.commitLine({ sublistId: 'item' });
+                    invoiceLineCount++;
+                } else {
+                    // Track unmapped fees for logging
+                    unmappedFees[colName] = amount;
+                }
+            }
+
+            if (Object.keys(unmappedFees).length > 0) {
+                logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
+                    'financialService.createInvoice: ' + Object.keys(unmappedFees).length +
+                    ' fee description(s) have no column-item mapping for settlement ' + settlement.reportId +
+                    '. Unmapped: ' + Object.keys(unmappedFees).join(', ') +
+                    '. Create mappings in Column-Item Map (customrecord_amz_column_item_map) to include these on the invoice.');
+            }
         } else {
-            logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
-                'financialService.createInvoice: No product charges line added for settlement ' + settlement.reportId +
-                ' (productCharges is 0 or empty)');
-        }
-        if (summary.shippingCredits) {
-            addInvoiceLine(inv, config, 'Shipping Credits', Math.abs(summary.shippingCredits));
-            invoiceLineCount++;
-        } else {
-            logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
-                'financialService.createInvoice: No shipping credits line added for settlement ' + settlement.reportId +
-                ' (shippingCredits is 0 or empty)');
+            // Fallback: add summary-level lines using shippingItem as generic item
+            if (summary.productCharges) {
+                addInvoiceLine(inv, config, 'Product Charges', Math.abs(summary.productCharges));
+                invoiceLineCount++;
+            }
+            if (summary.shippingCredits) {
+                addInvoiceLine(inv, config, 'Shipping Credits', Math.abs(summary.shippingCredits));
+                invoiceLineCount++;
+            }
         }
 
         if (invoiceLineCount === 0) {
             logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
                 'financialService.createInvoice: Invoice for settlement ' + settlement.reportId +
-                ' has NO line items. This may indicate the settlement report had no product charges or shipping credits.');
+                ' has NO line items. Ensure column-item mappings exist for settlement fee descriptions.');
         }
 
         logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
@@ -107,15 +135,14 @@ define([
             amazonRef: settlement.reportId
         });
 
-        return invId;
+        return { invoiceId: invId, unmappedFees: unmappedFees };
     }
 
     /**
-     * Adds a line item to a settlement invoice.
+     * Adds a summary-level line item to a settlement invoice (fallback when no column-item map).
      */
     function addInvoiceLine(inv, config, description, amount) {
         inv.selectNewLine({ sublistId: 'item' });
-        // Use shipping item as a generic service item for settlement lines
         var itemId = config.shippingItem;
         if (itemId) {
             inv.setCurrentSublistValue({ sublistId: 'item', fieldId: 'item', value: itemId });
@@ -124,6 +151,70 @@ define([
         inv.setCurrentSublistValue({ sublistId: 'item', fieldId: 'rate', value: amount });
         inv.setCurrentSublistValue({ sublistId: 'item', fieldId: 'description', value: description });
         inv.commitLine({ sublistId: 'item' });
+    }
+
+    /**
+     * Creates a Customer Payment against a settlement invoice.
+     * Matches old process: transform invoice to payment, set undepfunds = T.
+     * @param {Object} config - Connector config
+     * @param {number} invoiceId - NetSuite Invoice internal ID
+     * @param {Object} settlement - Settlement data with reportId, totalAmount
+     * @param {string} [payDate] - Payment date (defaults to settlement end date)
+     * @returns {number} Customer Payment record ID
+     */
+    function createSettlementPayment(config, invoiceId, settlement, payDate) {
+        logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+            'financialService.createSettlementPayment: Creating customer payment for invoice ' + invoiceId +
+            ', settlement ' + settlement.reportId + ', totalAmount: ' + (settlement.totalAmount || 0));
+
+        var payRec = record.transform({
+            fromType: record.Type.INVOICE,
+            fromId: invoiceId,
+            toType: record.Type.CUSTOMER_PAYMENT,
+            isDynamic: true
+        });
+
+        payRec.setValue({
+            fieldId: 'payment',
+            value: Math.abs(settlement.totalAmount || 0)
+        });
+        payRec.setValue({
+            fieldId: 'trandate',
+            value: payDate ? new Date(payDate) : (settlement.endDate ? new Date(settlement.endDate) : new Date())
+        });
+        payRec.setValue({ fieldId: 'undepfunds', value: 'T' });
+        payRec.setValue({
+            fieldId: 'memo',
+            value: 'Amazon Settlement Payment: ' + (settlement.reportId || 'Unknown')
+        });
+
+        if (config.paymentMethod) {
+            payRec.setValue({ fieldId: 'paymentmethod', value: config.paymentMethod });
+        }
+
+        // Apply to the specific invoice
+        var lineCount = payRec.getLineCount({ sublistId: 'apply' });
+        for (var i = 0; i < lineCount; i++) {
+            var applyId = payRec.getSublistValue({ sublistId: 'apply', fieldId: 'internalid', line: i });
+            if (String(applyId) === String(invoiceId)) {
+                payRec.selectLine({ sublistId: 'apply', line: i });
+                payRec.setCurrentSublistValue({ sublistId: 'apply', fieldId: 'apply', value: true });
+                payRec.commitLine({ sublistId: 'apply' });
+                break;
+            }
+        }
+
+        var paymentId = payRec.save({ ignoreMandatoryFields: true });
+
+        logger.success(constants.LOG_TYPE.FINANCIAL_RECON,
+            'Customer Payment created for settlement ' + settlement.reportId, {
+            configId: config.configId,
+            recordType: 'customerpayment',
+            recordId: paymentId,
+            amazonRef: settlement.reportId
+        });
+
+        return paymentId;
     }
 
     /**
@@ -604,6 +695,7 @@ define([
 
     return {
         createInvoice,
+        createSettlementPayment,
         createDeposit,
         createFeeJournalEntry,
         createFeeJournalEntriesByMonth,

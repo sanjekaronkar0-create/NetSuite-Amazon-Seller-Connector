@@ -7,14 +7,17 @@
 define([
     'N/record',
     'N/search',
+    'N/file',
     'N/https',
     'N/log',
     '../lib/constants',
     '../lib/amazonClient',
     '../lib/logger'
-], function (record, search, https, log, constants, amazonClient, logger) {
+], function (record, search, file, https, log, constants, amazonClient, logger) {
 
     const STL = constants.CUSTOM_RECORDS.SETTLEMENT;
+
+    var _settlementFolderId = null;
 
     /**
      * Fetches available settlement reports from Amazon.
@@ -64,7 +67,9 @@ define([
             'settlementService.downloadSettlementReport: Report downloaded successfully (' +
             (fileResponse.body ? fileResponse.body.length : 0) + ' bytes). Parsing data...');
 
-        return parseSettlementData(fileResponse.body);
+        var parsed = parseSettlementData(fileResponse.body);
+        parsed.rawData = fileResponse.body;
+        return parsed;
     }
 
     /**
@@ -328,6 +333,96 @@ define([
         });
     }
 
+    /**
+     * Gets or creates the SettlementReports folder under AmazonConnector.
+     * @returns {number} Internal ID of the SettlementReports folder
+     */
+    function getSettlementFolderId() {
+        if (_settlementFolderId) return _settlementFolderId;
+
+        var acSearch = search.create({
+            type: 'folder',
+            filters: [['name', 'is', 'AmazonConnector']],
+            columns: ['internalid']
+        });
+        var acResults = acSearch.run().getRange({ start: 0, end: 1 });
+        if (acResults.length === 0) {
+            throw new Error('Cannot find AmazonConnector folder in File Cabinet');
+        }
+        var parentId = parseInt(acResults[0].id, 10);
+
+        var folderSearch = search.create({
+            type: 'folder',
+            filters: [
+                ['name', 'is', 'SettlementReports'],
+                'AND',
+                ['parent', 'anyof', parentId]
+            ],
+            columns: ['internalid']
+        });
+        var results = folderSearch.run().getRange({ start: 0, end: 1 });
+        if (results.length > 0) {
+            _settlementFolderId = parseInt(results[0].id, 10);
+            return _settlementFolderId;
+        }
+
+        var folder = record.create({ type: record.Type.FOLDER });
+        folder.setValue({ fieldId: 'name', value: 'SettlementReports' });
+        folder.setValue({ fieldId: 'parent', value: parentId });
+        _settlementFolderId = folder.save();
+
+        logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+            'settlementService.getSettlementFolderId: Created SettlementReports folder (ID: ' + _settlementFolderId + ')');
+
+        return _settlementFolderId;
+    }
+
+    /**
+     * Stores the raw settlement report data as a file in the File Cabinet.
+     * @param {string} reportId - Amazon settlement report ID
+     * @param {string} rawData - Raw tab-delimited settlement report content
+     * @param {number} [settlementId] - Optional settlement record ID to link the file to
+     * @returns {number} Internal ID of the stored file
+     */
+    function storeSettlementFile(reportId, rawData, settlementId) {
+        logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+            'settlementService.storeSettlementFile: Storing raw settlement data for report ' + reportId +
+            ' (' + (rawData ? rawData.length : 0) + ' bytes)');
+
+        var safeReportId = (reportId || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_');
+        var fileName = 'settlement_' + safeReportId + '_' + Date.now() + '.tsv';
+
+        var fileObj = file.create({
+            name: fileName,
+            fileType: file.Type.CSV,
+            contents: rawData,
+            folder: getSettlementFolderId(),
+            isOnline: false
+        });
+
+        var fileId = fileObj.save();
+
+        logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+            'settlementService.storeSettlementFile: File saved (ID: ' + fileId + ', name: ' + fileName + ')');
+
+        if (settlementId) {
+            try {
+                record.submitFields({
+                    type: STL.ID,
+                    id: settlementId,
+                    values: { [STL.FIELDS.SETTLEMENT_FILE]: fileId }
+                });
+                logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                    'settlementService.storeSettlementFile: Linked file ' + fileId + ' to settlement record ' + settlementId);
+            } catch (e) {
+                logger.warn(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                    'settlementService.storeSettlementFile: Could not link file to settlement record: ' + e.message);
+            }
+        }
+
+        return fileId;
+    }
+
     return {
         fetchSettlementReports,
         downloadSettlementReport,
@@ -335,6 +430,7 @@ define([
         isSettlementProcessed,
         findExistingSettlement,
         createSettlementRecord,
-        updateSettlementStatus
+        updateSettlementStatus,
+        storeSettlementFile
     };
 });
