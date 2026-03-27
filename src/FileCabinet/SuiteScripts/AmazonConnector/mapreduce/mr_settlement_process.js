@@ -85,7 +85,12 @@ define([
 
                 var config = configHelper.getConfig(configId);
                 var parsed = settlementService.downloadSettlementReport(config, result.reportDocumentId);
-                var settlementId = settlementService.createSettlementRecord(config, result, parsed.summary);
+
+                // Reuse existing settlement record if one exists from a prior failed run
+                var existingId = settlementService.findExistingSettlement(result.reportId);
+                var settlementId = existingId
+                    ? existingId
+                    : settlementService.createSettlementRecord(config, result, parsed.summary);
 
                 // Strip raw rows from rowsByMonth — only columnAmounts and date
                 // are needed by reduce, and rows can push values over NetSuite's 10MB limit

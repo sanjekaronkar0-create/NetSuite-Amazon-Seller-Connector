@@ -181,13 +181,36 @@ define([
         let found = false;
         search.create({
             type: STL.ID,
-            filters: [[STL.FIELDS.REPORT_ID, 'is', reportId]],
+            filters: [
+                [STL.FIELDS.REPORT_ID, 'is', reportId],
+                'AND',
+                [STL.FIELDS.STATUS, 'anyof', [constants.SETTLEMENT_STATUS.RECONCILED]]
+            ],
             columns: ['internalid']
         }).run().each(function () {
             found = true;
             return false;
         });
         return found;
+    }
+
+    /**
+     * Finds an existing settlement record by report ID (any status).
+     * Used to reuse records from prior failed runs instead of creating duplicates.
+     * @param {string} reportId
+     * @returns {string|null} Settlement record internal ID, or null
+     */
+    function findExistingSettlement(reportId) {
+        var existingId = null;
+        search.create({
+            type: STL.ID,
+            filters: [[STL.FIELDS.REPORT_ID, 'is', reportId]],
+            columns: ['internalid']
+        }).run().each(function (result) {
+            existingId = result.id;
+            return false;
+        });
+        return existingId;
     }
 
     /**
@@ -243,6 +266,7 @@ define([
         downloadSettlementReport,
         parseSettlementData,
         isSettlementProcessed,
+        findExistingSettlement,
         createSettlementRecord,
         updateSettlementStatus
     };
