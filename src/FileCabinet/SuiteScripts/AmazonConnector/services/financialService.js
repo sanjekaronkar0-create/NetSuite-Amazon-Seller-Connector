@@ -307,9 +307,13 @@ define([
         }
 
         // Credit line: settlement/clearing account (balancing entry)
+        var balancingAccount = config.settleAccount || config.feeAccount;
+        if (!balancingAccount) {
+            throw new Error('No settlement or fee account configured for balancing JE line');
+        }
         var balancingAmount = Math.abs(totalDebits);
         je.selectNewLine({ sublistId: 'line' });
-        je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'account', value: config.settleAccount });
+        je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'account', value: balancingAccount });
         je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'credit', value: balancingAmount });
         je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'memo', value: 'Amazon Settlement Clearing' });
         je.commitLine({ sublistId: 'line' });

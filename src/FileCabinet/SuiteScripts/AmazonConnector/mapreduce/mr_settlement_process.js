@@ -87,6 +87,20 @@ define([
                 var parsed = settlementService.downloadSettlementReport(config, result.reportDocumentId);
                 var settlementId = settlementService.createSettlementRecord(config, result, parsed.summary);
 
+                // Strip raw rows from rowsByMonth — only columnAmounts and date
+                // are needed by reduce, and rows can push values over NetSuite's 10MB limit
+                var compactRowsByMonth = null;
+                if (parsed.rowsByMonth) {
+                    compactRowsByMonth = {};
+                    for (var mk in parsed.rowsByMonth) {
+                        if (!parsed.rowsByMonth.hasOwnProperty(mk)) continue;
+                        compactRowsByMonth[mk] = {
+                            date: parsed.rowsByMonth[mk].date,
+                            columnAmounts: parsed.rowsByMonth[mk].columnAmounts
+                        };
+                    }
+                }
+
                 var settlementData = {
                     settlementId: settlementId,
                     reportId: result.reportId,
@@ -100,7 +114,7 @@ define([
                     refunds: parsed.summary.refunds || 0,
                     endDate: result.dataEndTime || null,
                     columnAmounts: parsed.columnAmounts || null,
-                    rowsByMonth: parsed.rowsByMonth || null
+                    rowsByMonth: compactRowsByMonth
                 };
 
                 context.write({
@@ -175,8 +189,9 @@ define([
             for (const val of context.values) {
                 const settlement = JSON.parse(val);
 
+                let summary = null;
                 try {
-                    const summary = {
+                    summary = {
                         totalAmount: settlement.totalAmount,
                         productCharges: settlement.productCharges,
                         shippingCredits: settlement.shippingCredits,
