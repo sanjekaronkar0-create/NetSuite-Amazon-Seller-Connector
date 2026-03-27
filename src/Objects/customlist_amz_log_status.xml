@@ -1,18 +1,23 @@
 <customlist scriptid="customlist_amz_log_status">
-  <name>Amazon Log Status</name>
+  <description></description>
   <isinactive>F</isinactive>
   <isordered>T</isordered>
+  <name>Amazon Log Status</name>
   <customvalues>
     <customvalue scriptid="custrecord_amz_log_status_1">
+      <isinactive>F</isinactive>
       <value>Success</value>
     </customvalue>
     <customvalue scriptid="custrecord_amz_log_status_2">
+      <isinactive>F</isinactive>
       <value>Error</value>
     </customvalue>
     <customvalue scriptid="custrecord_amz_log_status_3">
+      <isinactive>F</isinactive>
       <value>Warning</value>
     </customvalue>
     <customvalue scriptid="custrecord_amz_log_status_4">
+      <isinactive>F</isinactive>
       <value>In Progress</value>
     </customvalue>
   </customvalues>

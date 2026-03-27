@@ -1,18 +1,23 @@
 <customlist scriptid="customlist_amz_error_status">
-  <name>Amazon Error Status</name>
+  <description></description>
   <isinactive>F</isinactive>
   <isordered>T</isordered>
+  <name>Amazon Error Status</name>
   <customvalues>
     <customvalue scriptid="custrecord_amz_eq_status_1">
+      <isinactive>F</isinactive>
       <value>Pending</value>
     </customvalue>
     <customvalue scriptid="custrecord_amz_eq_status_2">
+      <isinactive>F</isinactive>
       <value>Retrying</value>
     </customvalue>
     <customvalue scriptid="custrecord_amz_eq_status_3">
+      <isinactive>F</isinactive>
       <value>Resolved</value>
     </customvalue>
     <customvalue scriptid="custrecord_amz_eq_status_4">
+      <isinactive>F</isinactive>
       <value>Failed</value>
     </customvalue>
   </customvalues>

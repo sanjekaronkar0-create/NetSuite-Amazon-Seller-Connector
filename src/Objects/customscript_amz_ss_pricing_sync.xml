@@ -1,14 +1,24 @@
 <scheduledscript scriptid="customscript_amz_ss_pricing_sync">
-  <name>Amazon - Pricing Sync</name>
-  <scriptfile>[/SuiteScripts/AmazonConnector/scheduled/ss_pricing_sync.js]</scriptfile>
   <description>Syncs NetSuite prices to Amazon via Feeds API</description>
   <isinactive>F</isinactive>
+  <name>Amazon - Pricing Sync</name>
+  <notifyadmins>F</notifyadmins>
+  <notifyemails></notifyemails>
+  <notifyowner>T</notifyowner>
+  <scriptfile>[/SuiteScripts/AmazonConnector/scheduled/ss_pricing_sync.js]</scriptfile>
   <scriptdeployments>
     <scriptdeployment scriptid="customdeploy_amz_ss_pricing_sync">
-      <status>NOTSCHEDULED</status>
-      <title>Amazon Pricing Sync Deployment</title>
       <isdeployed>T</isdeployed>
       <loglevel>DEBUG</loglevel>
+      <status>NOTSCHEDULED</status>
+      <title>Amazon Pricing Sync Deployment</title>
+      <recurrence>
+        <single>
+          <repeat></repeat>
+          <startdate>2026-03-12</startdate>
+          <starttime>01:00:00Z</starttime>
+        </single>
+      </recurrence>
     </scriptdeployment>
   </scriptdeployments>
 </scheduledscript>

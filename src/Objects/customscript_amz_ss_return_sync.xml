@@ -1,16 +1,24 @@
 <scheduledscript scriptid="customscript_amz_ss_return_sync">
-  <name>Amazon - Return Sync (Scheduled)</name>
-  <scriptfile>[/SuiteScripts/AmazonConnector/scheduled/ss_return_sync.js]</scriptfile>
   <description>Syncs Amazon returns and creates NetSuite Return Authorizations.</description>
   <isinactive>F</isinactive>
+  <name>Amazon - Return Sync (Scheduled)</name>
   <notifyadmins>T</notifyadmins>
+  <notifyemails></notifyemails>
   <notifyowner>T</notifyowner>
+  <scriptfile>[/SuiteScripts/AmazonConnector/scheduled/ss_return_sync.js]</scriptfile>
   <scriptdeployments>
     <scriptdeployment scriptid="customdeploy_amz_ss_return_sync">
-      <status>NOTSCHEDULED</status>
-      <title>Amazon Return Sync Deployment</title>
       <isdeployed>T</isdeployed>
       <loglevel>DEBUG</loglevel>
+      <status>NOTSCHEDULED</status>
+      <title>Amazon Return Sync Deployment</title>
+      <recurrence>
+        <single>
+          <repeat></repeat>
+          <startdate>2026-03-12</startdate>
+          <starttime>01:00:00Z</starttime>
+        </single>
+      </recurrence>
     </scriptdeployment>
   </scriptdeployments>
 </scheduledscript>

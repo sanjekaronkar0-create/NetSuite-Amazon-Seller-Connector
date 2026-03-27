@@ -1,19 +1,22 @@
 <restlet scriptid="customscript_amz_rl_webhook">
-  <name>Amazon - Webhook Endpoint</name>
-  <scriptfile>[/SuiteScripts/AmazonConnector/restlet/rl_webhook.js]</scriptfile>
   <description>RESTlet endpoint for receiving Amazon notifications and external system integrations.</description>
   <isinactive>F</isinactive>
+  <name>Amazon - Webhook Endpoint</name>
   <notifyadmins>F</notifyadmins>
+  <notifyemails></notifyemails>
   <notifyowner>F</notifyowner>
-  <getfunction>get</getfunction>
-  <postfunction>post</postfunction>
-  <putfunction>put</putfunction>
+  <notifyuser>F</notifyuser>
+  <scriptfile>[/SuiteScripts/AmazonConnector/restlet/rl_webhook.js]</scriptfile>
   <scriptdeployments>
     <scriptdeployment scriptid="customdeploy_amz_rl_webhook">
-      <status>RELEASED</status>
-      <title>Amazon Webhook Endpoint</title>
+      <allemployees>F</allemployees>
+      <allpartners>F</allpartners>
+      <allroles>F</allroles>
+      <audslctrole></audslctrole>
       <isdeployed>T</isdeployed>
       <loglevel>DEBUG</loglevel>
+      <status>RELEASED</status>
+      <title>Amazon Webhook Endpoint</title>
     </scriptdeployment>
   </scriptdeployments>
 </restlet>

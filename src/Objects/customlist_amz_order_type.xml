@@ -1,15 +1,19 @@
 <customlist scriptid="customlist_amz_order_type">
-  <name>Amazon Order Type</name>
+  <description></description>
   <isinactive>F</isinactive>
   <isordered>T</isordered>
+  <name>Amazon Order Type</name>
   <customvalues>
     <customvalue scriptid="custrecord_amz_cfg_ot_1">
+      <isinactive>F</isinactive>
       <value>Sales Order</value>
     </customvalue>
     <customvalue scriptid="custrecord_amz_cfg_ot_2">
+      <isinactive>F</isinactive>
       <value>Cash Sale</value>
     </customvalue>
     <customvalue scriptid="custrecord_amz_cfg_ot_3">
+      <isinactive>F</isinactive>
       <value>Invoice</value>
     </customvalue>
   </customvalues>

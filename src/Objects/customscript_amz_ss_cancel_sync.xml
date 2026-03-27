@@ -1,14 +1,24 @@
 <scheduledscript scriptid="customscript_amz_ss_cancel_sync">
-  <name>Amazon - Order Cancellation Sync</name>
-  <scriptfile>[/SuiteScripts/AmazonConnector/scheduled/ss_cancel_sync.js]</scriptfile>
   <description>Detects canceled Amazon orders and closes corresponding NetSuite Sales Orders</description>
   <isinactive>F</isinactive>
+  <name>Amazon - Order Cancellation Sync</name>
+  <notifyadmins>F</notifyadmins>
+  <notifyemails></notifyemails>
+  <notifyowner>T</notifyowner>
+  <scriptfile>[/SuiteScripts/AmazonConnector/scheduled/ss_cancel_sync.js]</scriptfile>
   <scriptdeployments>
     <scriptdeployment scriptid="customdeploy_amz_ss_cancel_sync">
-      <status>NOTSCHEDULED</status>
-      <title>Amazon Cancel Sync Deployment</title>
       <isdeployed>T</isdeployed>
       <loglevel>DEBUG</loglevel>
+      <status>NOTSCHEDULED</status>
+      <title>Amazon Cancel Sync Deployment</title>
+      <recurrence>
+        <single>
+          <repeat></repeat>
+          <startdate>2026-03-18</startdate>
+          <starttime>01:00:00Z</starttime>
+        </single>
+      </recurrence>
     </scriptdeployment>
   </scriptdeployments>
 </scheduledscript>

@@ -1,17 +1,25 @@
 <suitelet scriptid="customscript_amz_sl_config">
-  <name>Amazon - Connector Dashboard</name>
-  <scriptfile>[/SuiteScripts/AmazonConnector/suitelet/sl_config.js]</scriptfile>
   <description>Configuration dashboard for the Amazon Seller Connector. View sync status, manage configs, trigger manual syncs.</description>
   <isinactive>F</isinactive>
+  <name>Amazon - Connector Dashboard</name>
   <notifyadmins>F</notifyadmins>
+  <notifyemails></notifyemails>
   <notifyowner>F</notifyowner>
+  <notifyuser>F</notifyuser>
+  <scriptfile>[/SuiteScripts/AmazonConnector/suitelet/sl_config.js]</scriptfile>
   <scriptdeployments>
     <scriptdeployment scriptid="customdeploy_amz_sl_config">
+      <allemployees>T</allemployees>
+      <allpartners>F</allpartners>
+      <allroles>F</allroles>
+      <audslctrole></audslctrole>
+      <eventtype></eventtype>
+      <isdeployed>T</isdeployed>
+      <isonline>F</isonline>
+      <loglevel>DEBUG</loglevel>
+      <runasrole>ADMINISTRATOR</runasrole>
       <status>RELEASED</status>
       <title>Amazon Connector Dashboard</title>
-      <isdeployed>T</isdeployed>
-      <loglevel>DEBUG</loglevel>
-      <allroles>F</allroles>
     </scriptdeployment>
   </scriptdeployments>
 </suitelet>

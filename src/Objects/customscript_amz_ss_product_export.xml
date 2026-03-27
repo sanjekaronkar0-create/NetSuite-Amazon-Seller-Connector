@@ -1,14 +1,24 @@
 <scheduledscript scriptid="customscript_amz_ss_product_export">
-  <name>Amazon - Product Feed Export</name>
-  <scriptfile>[/SuiteScripts/AmazonConnector/scheduled/ss_product_export.js]</scriptfile>
   <description>Exports product data from NetSuite to Amazon via Product Data feeds</description>
   <isinactive>F</isinactive>
+  <name>Amazon - Product Feed Export</name>
+  <notifyadmins>F</notifyadmins>
+  <notifyemails></notifyemails>
+  <notifyowner>T</notifyowner>
+  <scriptfile>[/SuiteScripts/AmazonConnector/scheduled/ss_product_export.js]</scriptfile>
   <scriptdeployments>
     <scriptdeployment scriptid="customdeploy_amz_ss_product_export">
-      <status>NOTSCHEDULED</status>
-      <title>Amazon Product Export Deployment</title>
       <isdeployed>T</isdeployed>
       <loglevel>DEBUG</loglevel>
+      <status>NOTSCHEDULED</status>
+      <title>Amazon Product Export Deployment</title>
+      <recurrence>
+        <single>
+          <repeat></repeat>
+          <startdate>2026-03-18</startdate>
+          <starttime>01:00:00Z</starttime>
+        </single>
+      </recurrence>
     </scriptdeployment>
   </scriptdeployments>
 </scheduledscript>

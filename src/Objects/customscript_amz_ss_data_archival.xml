@@ -1,14 +1,24 @@
 <scheduledscript scriptid="customscript_amz_ss_data_archival">
-  <name>Amazon - Data Archival &amp; Cleanup</name>
-  <scriptfile>[/SuiteScripts/AmazonConnector/scheduled/ss_data_archival.js]</scriptfile>
   <description>Archives old integration logs and resolved error queue entries based on configurable retention period</description>
   <isinactive>F</isinactive>
+  <name>Amazon - Data Archival &amp; Cleanup</name>
+  <notifyadmins>F</notifyadmins>
+  <notifyemails></notifyemails>
+  <notifyowner>T</notifyowner>
+  <scriptfile>[/SuiteScripts/AmazonConnector/scheduled/ss_data_archival.js]</scriptfile>
   <scriptdeployments>
     <scriptdeployment scriptid="customdeploy_amz_ss_data_archival">
-      <status>NOTSCHEDULED</status>
-      <title>Amazon Data Archival Deployment</title>
       <isdeployed>T</isdeployed>
       <loglevel>DEBUG</loglevel>
+      <status>NOTSCHEDULED</status>
+      <title>Amazon Data Archival Deployment</title>
+      <recurrence>
+        <single>
+          <repeat></repeat>
+          <startdate>2026-03-18</startdate>
+          <starttime>01:00:00Z</starttime>
+        </single>
+      </recurrence>
     </scriptdeployment>
   </scriptdeployments>
 </scheduledscript>

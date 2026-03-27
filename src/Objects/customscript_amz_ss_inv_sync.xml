@@ -1,16 +1,24 @@
 <scheduledscript scriptid="customscript_amz_ss_inv_sync">
-  <name>Amazon - Inventory Sync (Scheduled)</name>
-  <scriptfile>[/SuiteScripts/AmazonConnector/scheduled/ss_inventory_sync.js]</scriptfile>
   <description>Triggers Map/Reduce inventory export to push NetSuite inventory levels to Amazon.</description>
   <isinactive>F</isinactive>
+  <name>Amazon - Inventory Sync (Scheduled)</name>
   <notifyadmins>T</notifyadmins>
+  <notifyemails></notifyemails>
   <notifyowner>T</notifyowner>
+  <scriptfile>[/SuiteScripts/AmazonConnector/scheduled/ss_inventory_sync.js]</scriptfile>
   <scriptdeployments>
     <scriptdeployment scriptid="customdeploy_amz_ss_inv_sync">
-      <status>NOTSCHEDULED</status>
-      <title>Amazon Inventory Sync Deployment</title>
       <isdeployed>T</isdeployed>
       <loglevel>DEBUG</loglevel>
+      <status>NOTSCHEDULED</status>
+      <title>Amazon Inventory Sync Deployment</title>
+      <recurrence>
+        <single>
+          <repeat></repeat>
+          <startdate>2026-03-12</startdate>
+          <starttime>01:00:00Z</starttime>
+        </single>
+      </recurrence>
     </scriptdeployment>
   </scriptdeployments>
 </scheduledscript>

@@ -1,51 +1,67 @@
 <customlist scriptid="customlist_amz_log_type">
-  <name>Amazon Log Type</name>
+  <description></description>
   <isinactive>F</isinactive>
   <isordered>T</isordered>
+  <name>Amazon Log Type</name>
   <customvalues>
     <customvalue scriptid="custrecord_amz_log_type_1">
+      <isinactive>F</isinactive>
       <value>Order Sync</value>
     </customvalue>
     <customvalue scriptid="custrecord_amz_log_type_2">
+      <isinactive>F</isinactive>
       <value>Inventory Sync</value>
     </customvalue>
     <customvalue scriptid="custrecord_amz_log_type_3">
+      <isinactive>F</isinactive>
       <value>Fulfillment Sync</value>
     </customvalue>
     <customvalue scriptid="custrecord_amz_log_type_4">
+      <isinactive>F</isinactive>
       <value>Settlement Sync</value>
     </customvalue>
     <customvalue scriptid="custrecord_amz_log_type_5">
+      <isinactive>F</isinactive>
       <value>Return Sync</value>
     </customvalue>
     <customvalue scriptid="custrecord_amz_log_type_6">
+      <isinactive>F</isinactive>
       <value>API Call</value>
     </customvalue>
     <customvalue scriptid="custrecord_amz_log_type_7">
+      <isinactive>F</isinactive>
       <value>Pricing Sync</value>
     </customvalue>
     <customvalue scriptid="custrecord_amz_log_type_8">
+      <isinactive>F</isinactive>
       <value>Catalog Sync</value>
     </customvalue>
     <customvalue scriptid="custrecord_amz_log_type_9">
+      <isinactive>F</isinactive>
       <value>Error Retry</value>
     </customvalue>
     <customvalue scriptid="custrecord_amz_log_type_10">
+      <isinactive>F</isinactive>
       <value>Financial Recon</value>
     </customvalue>
     <customvalue scriptid="custrecord_amz_log_type_11">
+      <isinactive>F</isinactive>
       <value>Notification</value>
     </customvalue>
     <customvalue scriptid="custrecord_amz_log_type_12">
+      <isinactive>F</isinactive>
       <value>FBA Inventory</value>
     </customvalue>
     <customvalue scriptid="custrecord_amz_log_type_13">
+      <isinactive>F</isinactive>
       <value>Cancellation</value>
     </customvalue>
     <customvalue scriptid="custrecord_amz_log_type_14">
+      <isinactive>F</isinactive>
       <value>Data Archival</value>
     </customvalue>
     <customvalue scriptid="custrecord_amz_log_type_15">
+      <isinactive>F</isinactive>
       <value>Feed Tracking</value>
     </customvalue>
   </customvalues>

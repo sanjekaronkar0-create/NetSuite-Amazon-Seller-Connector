@@ -1,21 +1,27 @@
 <customlist scriptid="customlist_amz_order_status">
-  <name>Amazon Order Status</name>
+  <description></description>
   <isinactive>F</isinactive>
   <isordered>T</isordered>
+  <name>Amazon Order Status (2)</name>
   <customvalues>
     <customvalue scriptid="custrecord_amz_om_status_1">
+      <isinactive>F</isinactive>
       <value>Pending</value>
     </customvalue>
     <customvalue scriptid="custrecord_amz_om_status_2">
+      <isinactive>F</isinactive>
       <value>Unshipped</value>
     </customvalue>
     <customvalue scriptid="custrecord_amz_om_status_3">
+      <isinactive>F</isinactive>
       <value>Shipped</value>
     </customvalue>
     <customvalue scriptid="custrecord_amz_om_status_4">
+      <isinactive>F</isinactive>
       <value>Canceled</value>
     </customvalue>
     <customvalue scriptid="custrecord_amz_om_status_5">
+      <isinactive>F</isinactive>
       <value>Returned</value>
     </customvalue>
   </customvalues>

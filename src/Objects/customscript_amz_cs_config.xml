@@ -1,15 +1,25 @@
 <clientscript scriptid="customscript_amz_cs_config">
-  <name>Amazon - Config Client Script</name>
-  <scriptfile>[/SuiteScripts/AmazonConnector/client/cs_config.js]</scriptfile>
   <description>Client-side validation and UI interactions for the Amazon Connector dashboard and config records.</description>
   <isinactive>F</isinactive>
+  <name>Amazon - Config Client Script</name>
+  <notifyadmins>F</notifyadmins>
+  <notifyemails></notifyemails>
+  <notifyowner>T</notifyowner>
+  <notifyuser>F</notifyuser>
+  <scriptfile>[/SuiteScripts/AmazonConnector/client/cs_config.js]</scriptfile>
   <scriptdeployments>
     <scriptdeployment scriptid="customdeploy_amz_cs_config">
-      <status>RELEASED</status>
-      <title>Amazon Config CS Deployment</title>
+      <allemployees>F</allemployees>
+      <alllocalizationcontexts>T</alllocalizationcontexts>
+      <allpartners>F</allpartners>
+      <allroles>F</allroles>
+      <audslctrole></audslctrole>
+      <eventtype></eventtype>
+      <executioncontext>ACTION|ADVANCEDREVREC|BANKCONNECTIVITY|BANKSTATEMENTPARSER|BUNDLEINSTALLATION|CLIENT|CONSOLRATEADJUSTOR|CSVIMPORT|CUSTOMGLLINES|CUSTOMMASSUPDATE|CUSTOMTOOL|DATASETBUILDER|DEBUGGER|EMAILCAPTURE|FICONNECTIVITY|FIPARSER|MAPREDUCE|OCRPLUGIN|OTHER|PAYMENTGATEWAY|PAYMENTPOSTBACK|PLATFORMEXTENSION|PORTLET|PROMOTIONS|RECORDACTION|RESTLET|RESTWEBSERVICES|SCHEDULED|SDFINSTALLATION|SHIPPINGPARTNERS|SUITELET|TAXCALCULATION|USEREVENT|USERINTERFACE|WEBSERVICES|WORKBOOKBUILDER|WORKFLOW</executioncontext>
       <isdeployed>T</isdeployed>
       <loglevel>DEBUG</loglevel>
       <recordtype>[scriptid=customrecord_amz_connector_config]</recordtype>
+      <status>RELEASED</status>
     </scriptdeployment>
   </scriptdeployments>
 </clientscript>
