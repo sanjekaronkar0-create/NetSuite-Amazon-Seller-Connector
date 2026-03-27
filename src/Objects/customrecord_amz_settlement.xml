@@ -119,6 +119,14 @@
       <description>Comma-separated list of JE IDs when split by month</description>
     </customrecordcustomfield>
 
+    <customrecordcustomfield scriptid="custrecord_amz_stl_file">
+      <label>Settlement Report File</label>
+      <fieldtype>SELECT</fieldtype>
+      <selectrecordtype>-100</selectrecordtype>
+      <displaytype>NORMAL</displaytype>
+      <description>Raw settlement report file stored in File Cabinet for audit and reference</description>
+    </customrecordcustomfield>
+
     <customrecordcustomfield scriptid="custrecord_amz_stl_status">
       <label>Processing Status</label>
       <fieldtype>SELECT</fieldtype>

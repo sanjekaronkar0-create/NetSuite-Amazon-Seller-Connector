@@ -135,6 +135,16 @@ define([
                         'Settlement MR map: Created new settlement record (ID: ' + settlementId + ') for report ' + result.reportId);
                 }
 
+                // Store raw settlement report data in File Cabinet for audit/reference
+                if (parsed.rawData) {
+                    try {
+                        settlementService.storeSettlementFile(result.reportId, parsed.rawData, settlementId);
+                    } catch (fileErr) {
+                        logger.warn(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                            'Settlement MR map: Could not store settlement file for report ' + result.reportId + ': ' + fileErr.message);
+                    }
+                }
+
                 // Strip raw rows from rowsByMonth — only columnAmounts and date
                 // are needed by reduce, and rows can push values over NetSuite's 10MB limit
                 var compactRowsByMonth = null;

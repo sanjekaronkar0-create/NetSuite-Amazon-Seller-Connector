@@ -171,6 +171,7 @@ define([], function () {
                 NS_INVOICE: 'custrecord_amz_stl_ns_invoice',
                 NS_JOURNAL: 'custrecord_amz_stl_ns_journal',
                 NS_JOURNALS: 'custrecord_amz_stl_ns_journals',
+                SETTLEMENT_FILE: 'custrecord_amz_stl_file',
                 STATUS: 'custrecord_amz_stl_status',
                 CONFIG: 'custrecord_amz_stl_config'
             }
