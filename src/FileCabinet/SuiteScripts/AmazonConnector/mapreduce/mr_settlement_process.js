@@ -261,7 +261,7 @@ define([
                 ', feeAccount: ' + (config.feeAccount || 'NOT SET') +
                 ', customer: ' + (config.customer || 'NOT SET'));
 
-            // Load charge account map if enabled
+            // Load charge account map if enabled (used for JE lines in DEPOSIT mode)
             let chargeAccountMap = null;
             if (useChargeMap) {
                 chargeAccountMap = configHelper.getChargeAccountMap(configId);
@@ -269,6 +269,15 @@ define([
                     'Settlement MR reduce: Loaded charge account map with ' +
                     (chargeAccountMap && chargeAccountMap.map ? Object.keys(chargeAccountMap.map).length : 0) +
                     ' mapping(s), defaultAccount: ' + (chargeAccountMap && chargeAccountMap.defaultAccount ? chargeAccountMap.defaultAccount : 'NONE'));
+            }
+
+            // Load column-item map for INVOICE mode (maps fee descriptions → Other Charge items)
+            let columnItemMap = null;
+            if (settleTranType === constants.SETTLEMENT_TRAN_TYPE.INVOICE) {
+                columnItemMap = configHelper.getColumnItemMap(configId, { useInSettle: true });
+                logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                    'Settlement MR reduce: Loaded column-item map with ' +
+                    (columnItemMap ? Object.keys(columnItemMap).length : 0) + ' mapping(s) for invoice fee lines');
             }
 
             for (const val of context.values) {
@@ -294,24 +303,62 @@ define([
 
                     let depositId = null;
                     let invoiceId = null;
+                    let paymentId = null;
                     let journalId = null;
                     let journalIds = [];
 
                     // Create payment transaction based on configured type
                     if (settleTranType === constants.SETTLEMENT_TRAN_TYPE.INVOICE) {
-                        // Invoice mode (like old NES_ARES_sch_amazon_invoices.js)
-                        if (config.customer && summary.totalAmount) {
+                        // Invoice mode: fees go directly on the invoice as Other Charge items
+                        // (like old NES_ARES_sch_amazon_invoices.js updateInvoices)
+                        if (config.customer) {
                             logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
-                                'Settlement MR reduce: Creating INVOICE for settlement ' + settlement.reportId +
-                                '. Customer: ' + config.customer + ', totalAmount: ' + summary.totalAmount);
-                            invoiceId = financialService.createInvoice(config, settlement, summary);
+                                'Settlement MR reduce: Creating INVOICE with fee lines for settlement ' + settlement.reportId +
+                                '. Customer: ' + config.customer + ', totalAmount: ' + summary.totalAmount +
+                                ', columnAmounts: ' + (settlement.columnAmounts ? Object.keys(settlement.columnAmounts).length + ' entries' : 'NONE'));
+
+                            var invoiceResult = financialService.createInvoice(
+                                config, settlement, summary, settlement.columnAmounts, columnItemMap
+                            );
+                            invoiceId = invoiceResult.invoiceId;
+
                             logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
-                                'Settlement MR reduce: Invoice created (ID: ' + invoiceId + ') for settlement ' + settlement.reportId);
+                                'Settlement MR reduce: Invoice created (ID: ' + invoiceId + ') for settlement ' + settlement.reportId +
+                                (invoiceResult.unmappedFees && Object.keys(invoiceResult.unmappedFees).length > 0
+                                    ? '. Unmapped fees: ' + Object.keys(invoiceResult.unmappedFees).join(', ')
+                                    : '. All fees mapped to invoice lines'));
+
+                            // Create Customer Payment against the invoice
+                            if (invoiceId && summary.totalAmount) {
+                                try {
+                                    paymentId = financialService.createSettlementPayment(config, invoiceId, settlement);
+                                    logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                                        'Settlement MR reduce: Customer Payment created (ID: ' + paymentId + ') for settlement ' + settlement.reportId);
+                                } catch (payErr) {
+                                    logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
+                                        'Settlement MR reduce: Customer Payment creation failed for settlement ' + settlement.reportId +
+                                        ': ' + payErr.message + '. Invoice ' + invoiceId + ' was created but remains open.');
+                                }
+                            }
+
+                            // Create JE only for unmapped fees (charges without a column-item mapping)
+                            var unmappedFees = invoiceResult.unmappedFees || {};
+                            if (Object.keys(unmappedFees).length > 0 && useChargeMap) {
+                                logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                                    'Settlement MR reduce: Creating JE for ' + Object.keys(unmappedFees).length +
+                                    ' unmapped fee(s) for settlement ' + settlement.reportId);
+                                var unmappedSummary = { sellingFees: 0, fbaFees: 0, otherFees: 0, promoRebates: 0 };
+                                for (var uf in unmappedFees) {
+                                    if (unmappedFees.hasOwnProperty(uf)) unmappedSummary.otherFees += unmappedFees[uf];
+                                }
+                                journalId = financialService.createFeeJournalEntry(
+                                    config, settlement, unmappedSummary, unmappedFees, chargeAccountMap
+                                );
+                            }
                         } else {
                             logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
                                 'Settlement MR reduce: Skipping invoice creation for settlement ' + settlement.reportId +
-                                '. Reason: ' + (!config.customer ? 'customer not configured on config' : '') +
-                                (!summary.totalAmount ? ((!config.customer ? ', ' : '') + 'totalAmount is 0 or empty') : ''), {
+                                '. Reason: customer not configured on config', {
                                 configId: configId,
                                 amazonRef: settlement.reportId
                             });
@@ -336,59 +383,58 @@ define([
                                 amazonRef: settlement.reportId
                             });
                         }
-                    }
 
-                    // Create Fee Journal Entries based on configured grouping
-                    var hasFees = summary.sellingFees || summary.fbaFees || summary.otherFees || summary.promoRebates;
-                    var hasAccount = config.feeAccount || (chargeAccountMap && Object.keys(chargeAccountMap.map).length > 0);
+                        // Create Fee Journal Entries (DEPOSIT mode only — in INVOICE mode fees are on the invoice)
+                        var hasFees = summary.sellingFees || summary.fbaFees || summary.otherFees || summary.promoRebates;
+                        var hasAccount = config.feeAccount || (chargeAccountMap && Object.keys(chargeAccountMap.map).length > 0);
 
-                    logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
-                        'Settlement MR reduce: Fee JE check for settlement ' + settlement.reportId +
-                        ' - sellingFees: ' + (summary.sellingFees || 0) +
-                        ', fbaFees: ' + (summary.fbaFees || 0) +
-                        ', otherFees: ' + (summary.otherFees || 0) +
-                        ', promoRebates: ' + (summary.promoRebates || 0) +
-                        ', hasFees: ' + !!hasFees +
-                        ', hasAccount: ' + !!hasAccount);
+                        logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                            'Settlement MR reduce: Fee JE check for settlement ' + settlement.reportId +
+                            ' - sellingFees: ' + (summary.sellingFees || 0) +
+                            ', fbaFees: ' + (summary.fbaFees || 0) +
+                            ', otherFees: ' + (summary.otherFees || 0) +
+                            ', promoRebates: ' + (summary.promoRebates || 0) +
+                            ', hasFees: ' + !!hasFees +
+                            ', hasAccount: ' + !!hasAccount);
 
-                    if (hasFees && hasAccount) {
-                        if (jeGrouping === constants.JE_GROUPING.BY_MONTH && settlement.rowsByMonth) {
-                            var monthKeys = Object.keys(settlement.rowsByMonth);
-                            logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
-                                'Settlement MR reduce: Creating BY_MONTH fee JEs for settlement ' + settlement.reportId +
-                                '. Months found: ' + monthKeys.join(', '));
-                            // Split JEs by month (like old NES_ARES_sch_settlement_charges.js)
-                            journalIds = financialService.createFeeJournalEntriesByMonth(
-                                config, settlement, settlement.rowsByMonth, chargeAccountMap
-                            );
-                            logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
-                                'Settlement MR reduce: Created ' + journalIds.length + ' monthly JE(s) for settlement ' + settlement.reportId +
-                                '. JE IDs: ' + journalIds.join(', '));
+                        if (hasFees && hasAccount) {
+                            if (jeGrouping === constants.JE_GROUPING.BY_MONTH && settlement.rowsByMonth) {
+                                var monthKeys = Object.keys(settlement.rowsByMonth);
+                                logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                                    'Settlement MR reduce: Creating BY_MONTH fee JEs for settlement ' + settlement.reportId +
+                                    '. Months found: ' + monthKeys.join(', '));
+                                journalIds = financialService.createFeeJournalEntriesByMonth(
+                                    config, settlement, settlement.rowsByMonth, chargeAccountMap
+                                );
+                                logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                                    'Settlement MR reduce: Created ' + journalIds.length + ' monthly JE(s) for settlement ' + settlement.reportId +
+                                    '. JE IDs: ' + journalIds.join(', '));
+                            } else {
+                                logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                                    'Settlement MR reduce: Creating single fee JE (PER_SETTLEMENT) for settlement ' + settlement.reportId +
+                                    (settlement.columnAmounts ? '. Column amounts available for granular lines' : '. Using summary-based fee lines'));
+                                journalId = financialService.createFeeJournalEntry(
+                                    config, settlement, summary, settlement.columnAmounts, chargeAccountMap
+                                );
+                                logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                                    'Settlement MR reduce: Fee JE ' + (journalId ? 'created (ID: ' + journalId + ')' : 'was NOT created (no fee lines)') +
+                                    ' for settlement ' + settlement.reportId);
+                            }
                         } else {
-                            logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
-                                'Settlement MR reduce: Creating single fee JE (PER_SETTLEMENT) for settlement ' + settlement.reportId +
-                                (settlement.columnAmounts ? '. Column amounts available for granular lines' : '. Using summary-based fee lines'));
-                            // Single JE per settlement (default)
-                            journalId = financialService.createFeeJournalEntry(
-                                config, settlement, summary, settlement.columnAmounts, chargeAccountMap
-                            );
-                            logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
-                                'Settlement MR reduce: Fee JE ' + (journalId ? 'created (ID: ' + journalId + ')' : 'was NOT created (no fee lines)') +
-                                ' for settlement ' + settlement.reportId);
+                            logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
+                                'Settlement MR reduce: Skipping fee JE creation for settlement ' + settlement.reportId +
+                                '. Reason: ' + (!hasFees ? 'no fees found in settlement' : 'no fee account configured'), {
+                                configId: configId,
+                                amazonRef: settlement.reportId
+                            });
                         }
-                    } else {
-                        logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
-                            'Settlement MR reduce: Skipping fee JE creation for settlement ' + settlement.reportId +
-                            '. Reason: ' + (!hasFees ? 'no fees found in settlement' : 'no fee account configured'), {
-                            configId: configId,
-                            amazonRef: settlement.reportId
-                        });
                     }
 
                     logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
                         'Settlement MR reduce: Updating settlement record ' + settlement.settlementId + ' to RECONCILED status. ' +
                         'depositId: ' + (depositId || 'none') +
                         ', invoiceId: ' + (invoiceId || 'none') +
+                        ', paymentId: ' + (paymentId || 'none') +
                         ', journalId: ' + (journalId || 'none') +
                         ', journalIds: ' + (journalIds.length ? journalIds.join(',') : 'none'));
 
@@ -402,8 +448,10 @@ define([
 
                     logger.success(constants.LOG_TYPE.FINANCIAL_RECON,
                         'Settlement ' + settlement.reportId + ' reconciled' +
-                        (settleTranType === constants.SETTLEMENT_TRAN_TYPE.INVOICE ? ' (Invoice)' : ' (Deposit)') +
-                        (jeGrouping === constants.JE_GROUPING.BY_MONTH ? ' [JEs by month]' : ''), {
+                        (settleTranType === constants.SETTLEMENT_TRAN_TYPE.INVOICE
+                            ? ' (Invoice' + (paymentId ? ' + Payment' : '') + ')'
+                            : ' (Deposit)') +
+                        (journalId || journalIds.length ? ' + JE' : ''), {
                         configId: configId,
                         amazonRef: settlement.reportId
                     });
