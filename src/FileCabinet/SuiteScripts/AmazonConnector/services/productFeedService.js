@@ -142,44 +142,6 @@ define([
     }
 
     /**
-     * Builds a Product Relationship feed (parent-child/variation).
-     * @param {string} sellerId
-     * @param {Array<Object>} relationships
-     * @returns {string} XML feed
-     */
-    function buildRelationshipFeedXml(sellerId, relationships) {
-        var xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
-        xml += '<AmazonEnvelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ';
-        xml += 'xsi:noNamespaceSchemaLocation="amzn-envelope.xsd">\n';
-        xml += '  <Header>\n';
-        xml += '    <DocumentVersion>1.01</DocumentVersion>\n';
-        xml += '    <MerchantIdentifier>' + escapeXml(sellerId) + '</MerchantIdentifier>\n';
-        xml += '  </Header>\n';
-        xml += '  <MessageType>Relationship</MessageType>\n';
-
-        relationships.forEach(function (rel, index) {
-            xml += '  <Message>\n';
-            xml += '    <MessageID>' + (index + 1) + '</MessageID>\n';
-            xml += '    <OperationType>Update</OperationType>\n';
-            xml += '    <Relationship>\n';
-            xml += '      <ParentSKU>' + escapeXml(rel.parentSku) + '</ParentSKU>\n';
-
-            rel.children.forEach(function (child) {
-                xml += '      <Relation>\n';
-                xml += '        <SKU>' + escapeXml(child.sku) + '</SKU>\n';
-                xml += '        <Type>Variation</Type>\n';
-                xml += '      </Relation>\n';
-            });
-
-            xml += '    </Relationship>\n';
-            xml += '  </Message>\n';
-        });
-
-        xml += '</AmazonEnvelope>';
-        return xml;
-    }
-
-    /**
      * Submits a product feed to Amazon.
      * @param {Object} config
      * @param {string} feedContent - XML feed
@@ -214,38 +176,6 @@ define([
         return feedResponse;
     }
 
-    /**
-     * Builds an Image feed for Amazon.
-     * @param {string} sellerId
-     * @param {Array<Object>} images - Array of { sellerSku, imageUrl, imageType }
-     * @returns {string} XML feed
-     */
-    function buildImageFeedXml(sellerId, images) {
-        var xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
-        xml += '<AmazonEnvelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ';
-        xml += 'xsi:noNamespaceSchemaLocation="amzn-envelope.xsd">\n';
-        xml += '  <Header>\n';
-        xml += '    <DocumentVersion>1.01</DocumentVersion>\n';
-        xml += '    <MerchantIdentifier>' + escapeXml(sellerId) + '</MerchantIdentifier>\n';
-        xml += '  </Header>\n';
-        xml += '  <MessageType>ProductImage</MessageType>\n';
-
-        images.forEach(function (img, index) {
-            xml += '  <Message>\n';
-            xml += '    <MessageID>' + (index + 1) + '</MessageID>\n';
-            xml += '    <OperationType>Update</OperationType>\n';
-            xml += '    <ProductImage>\n';
-            xml += '      <SKU>' + escapeXml(img.sellerSku) + '</SKU>\n';
-            xml += '      <ImageType>' + escapeXml(img.imageType || 'Main') + '</ImageType>\n';
-            xml += '      <ImageLocation>' + escapeXml(img.imageUrl) + '</ImageLocation>\n';
-            xml += '    </ProductImage>\n';
-            xml += '  </Message>\n';
-        });
-
-        xml += '</AmazonEnvelope>';
-        return xml;
-    }
-
     function escapeXml(str) {
         if (!str) return '';
         return String(str)
@@ -260,8 +190,6 @@ define([
         getProductSyncItems,
         getNetSuiteItemDetails,
         buildProductFeedXml,
-        buildRelationshipFeedXml,
-        buildImageFeedXml,
         submitProductFeed
     };
 });

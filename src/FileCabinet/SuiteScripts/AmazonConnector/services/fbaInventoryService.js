@@ -212,31 +212,9 @@ define([
         }
     }
 
-    /**
-     * Gets FBA inventory summary via API (alternative to report).
-     * @param {Object} config
-     * @returns {Array<Object>} Inventory summaries
-     */
-    function getFbaInventorySummaries(config) {
-        var allItems = [];
-        var nextToken = null;
-
-        do {
-            var response = amazonClient.getFbaInventory(config, nextToken);
-            var payload = response.payload || response;
-            var inventories = payload.inventorySummaries || [];
-            allItems = allItems.concat(inventories);
-            nextToken = (payload.pagination || {}).nextToken || null;
-        } while (nextToken);
-
-        return allItems;
-    }
-
     return {
         requestFbaInventoryReport,
         downloadFbaInventoryReport,
-        parseFbaInventoryReport,
-        updateFbaInventory,
-        getFbaInventorySummaries
+        updateFbaInventory
     };
 });

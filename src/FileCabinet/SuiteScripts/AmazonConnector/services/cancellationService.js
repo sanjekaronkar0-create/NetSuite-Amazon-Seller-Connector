@@ -182,8 +182,6 @@ define([
     }
 
     return {
-        fetchCanceledOrders,
-        processCancellation,
         processCanceledOrders
     };
 });

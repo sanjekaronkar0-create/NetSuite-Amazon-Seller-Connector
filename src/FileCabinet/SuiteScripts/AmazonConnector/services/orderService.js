@@ -193,7 +193,7 @@ define([
             : config;
 
         const useCashSale = effectiveConfig.orderType === constants.ORDER_TYPE.CASH_SALE;
-        const useInvoice = effectiveConfig.orderType === constants.ORDER_TYPE.INVOICE;
+        const useSalesOrder = effectiveConfig.orderType === constants.ORDER_TYPE.SALES_ORDER;
         const isFBA = amazonOrder.FulfillmentChannel === 'AFN';
         const isB2B = amazonOrder.IsBusinessOrder === true || amazonOrder.IsBusinessOrder === 'true';
 
@@ -203,7 +203,7 @@ define([
             columnItemMap = configHelper.getColumnItemMap(effectiveConfig.configId, { useInOrders: true });
         }
 
-        const recType = useInvoice ? record.Type.INVOICE : useCashSale ? record.Type.CASH_SALE : record.Type.SALES_ORDER;
+        const recType = useSalesOrder ? record.Type.SALES_ORDER : useCashSale ? record.Type.CASH_SALE : record.Type.INVOICE;
         const txn = record.create({ type: recType, isDynamic: true });
 
         // Resolve customer: marketplace → B2B → FBA → email lookup → create new → default
@@ -232,12 +232,12 @@ define([
         if (location) txn.setValue({ fieldId: 'location', value: location });
 
         // Set custom form if configured
-        if (useInvoice && effectiveConfig.invoiceForm) {
-            txn.setValue({ fieldId: 'customform', value: effectiveConfig.invoiceForm });
+        if (useSalesOrder && effectiveConfig.salesOrderForm) {
+            txn.setValue({ fieldId: 'customform', value: effectiveConfig.salesOrderForm });
         } else if (useCashSale && effectiveConfig.cashSaleForm) {
             txn.setValue({ fieldId: 'customform', value: effectiveConfig.cashSaleForm });
-        } else if (!useCashSale && !useInvoice && effectiveConfig.salesOrderForm) {
-            txn.setValue({ fieldId: 'customform', value: effectiveConfig.salesOrderForm });
+        } else if (!useSalesOrder && !useCashSale && effectiveConfig.invoiceForm) {
+            txn.setValue({ fieldId: 'customform', value: effectiveConfig.invoiceForm });
         }
 
         txn.setValue({ fieldId: 'otherrefnum', value: amazonOrder.AmazonOrderId });
@@ -268,7 +268,7 @@ define([
             txn.setValue({ fieldId: 'trandate', value: new Date(amazonOrder.PurchaseDate) });
         }
 
-        if ((useCashSale || useInvoice) && effectiveConfig.paymentMethod) {
+        if ((useCashSale || !useSalesOrder) && effectiveConfig.paymentMethod) {
             txn.setValue({ fieldId: 'paymentmethod', value: effectiveConfig.paymentMethod });
         }
 
@@ -368,15 +368,16 @@ define([
         }
 
         const txnId = txn.save({ ignoreMandatoryFields: true });
+        const useInvoice = !useSalesOrder && !useCashSale;
         const orderMapId = createOrderMapRecord(effectiveConfig, amazonOrder, txnId, useCashSale, useInvoice);
 
         const result = { orderMapId };
-        if (useInvoice) {
-            result.invoiceId = txnId;
+        if (useSalesOrder) {
+            result.salesOrderId = txnId;
         } else if (useCashSale) {
             result.cashSaleId = txnId;
         } else {
-            result.salesOrderId = txnId;
+            result.invoiceId = txnId;
         }
         return result;
     }

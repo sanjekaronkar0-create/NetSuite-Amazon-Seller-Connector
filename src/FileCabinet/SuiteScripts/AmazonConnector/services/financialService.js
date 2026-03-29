@@ -193,7 +193,7 @@ define([
         for (var i = 0; i < orderLines.length; i++) {
             var line = orderLines[i];
             var amountType = line.amountType || line.amount_type || '';
-            var desc = line.desc || line.amount_desc || '';
+            var desc = line.amountDesc || line.desc || line.amount_desc || '';
             var amount = parseFloat(line.amount) || 0;
             var sku = line.sku || '';
             var promoId = line.promoId || line.promo_id || '';
@@ -312,7 +312,7 @@ define([
         for (var i = 0; i < refundLines.length; i++) {
             var line = refundLines[i];
             var amountType = line.amountType || line.amount_type || '';
-            var desc = line.desc || line.amount_desc || '';
+            var desc = line.amountDesc || line.desc || line.amount_desc || '';
             var amount = parseFloat(line.amount) || 0;
             var sku = line.sku || '';
             var orderLineId = line.orderLineId || line.order_line_id || '';
@@ -619,49 +619,18 @@ define([
         });
     }
 
-    /**
-     * Updates a settlement summary record with aggregated totals from line records.
-     * Used by the settlement line M/R to keep summary in sync after line creation.
-     * @param {string|number} summaryId - Settlement summary record internal ID
-     * @param {Object} totals - Aggregated totals from recalcSummaryTotals
-     */
-    function updateSummaryTotals(summaryId, totals) {
-        var values = {};
-        values[STL.FIELDS.TOTAL_AMOUNT] = totals.settlementTotal || 0;
-        values[STL.FIELDS.PRODUCT_CHARGES] = totals.totalPayments || 0;
-        values[STL.FIELDS.REFUNDS] = totals.totalRefunds || 0;
-        values[STL.FIELDS.OTHER_FEES] = totals.totalOtherCharges || 0;
-        if (STL.FIELDS.TOTAL_PAYMENTS) values[STL.FIELDS.TOTAL_PAYMENTS] = totals.totalPayments || 0;
-        if (STL.FIELDS.TOTAL_REFUNDS) values[STL.FIELDS.TOTAL_REFUNDS] = totals.totalRefunds || 0;
-        if (STL.FIELDS.TOTAL_OTHER) values[STL.FIELDS.TOTAL_OTHER] = totals.totalOtherCharges || 0;
-        if (STL.FIELDS.RECALC) values[STL.FIELDS.RECALC] = false;
-
-        record.submitFields({
-            type: STL.ID,
-            id: summaryId,
-            values: values
-        });
-    }
-
     // ========================================================================
     // Public API
     // ========================================================================
 
     return {
-        // New settlement functions
         createSettlementInvoice,
         createSettlementCreditMemo,
         createSettlementRefund,
-        lookupItem,
-        lookupSettlementItem,
         lookupInvoice,
-        resolveCurrencyId,
-        remapPromotionDesc,
-        // Kept functions
         createSettlementPayment,
         createCreditMemo,
         createCustomerRefund,
-        updateSettlementFinancials,
-        updateSummaryTotals
+        updateSettlementFinancials
     };
 });
