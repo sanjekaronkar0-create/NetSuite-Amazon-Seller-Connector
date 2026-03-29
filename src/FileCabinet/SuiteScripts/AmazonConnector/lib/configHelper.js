@@ -11,7 +11,13 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
     const CIM = constants.CUSTOM_RECORDS.COLUMN_ITEM_MAP;
     const MKT = constants.CUSTOM_RECORDS.MARKETPLACE_CFG;
     const CHG = constants.CUSTOM_RECORDS.CHARGE_MAP;
-    const isOneWorld = runtime.isFeatureInEffect({ feature: 'SUBSIDIARIES' });
+    var _isOneWorld = null;
+    function isOneWorld() {
+        if (_isOneWorld === null) {
+            _isOneWorld = runtime.isFeatureInEffect({ feature: 'SUBSIDIARIES' });
+        }
+        return _isOneWorld;
+    }
 
     /**
      * Loads all active configuration records.
@@ -231,7 +237,7 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
             refreshToken: getValue(CR.FIELDS.REFRESH_TOKEN),
             endpoint: getValue(CR.FIELDS.ENDPOINT),
             marketplaceId: getValue(CR.FIELDS.MARKETPLACE_ID),
-            subsidiary: isOneWorld ? getValue(CR.FIELDS.SUBSIDIARY) : null,
+            subsidiary: isOneWorld() ? getValue(CR.FIELDS.SUBSIDIARY) : null,
             location: getValue(CR.FIELDS.LOCATION),
             customer: getValue(CR.FIELDS.CUSTOMER),
             paymentMethod: getValue(CR.FIELDS.PAYMENT_METHOD),
