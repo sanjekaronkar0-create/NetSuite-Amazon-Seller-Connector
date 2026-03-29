@@ -6,6 +6,11 @@
  *              1. Downloads settlement flat file from Amazon SP-API
  *              2. Creates one customrecord_amz_settlement_line per TSV row
  *              3. Aggregates totals into customrecord_amz_settlement (summary)
+ *
+ *              Architecture: Map downloads & parses the report, emitting each row individually.
+ *              Reduce creates one settlement line record per invocation (avoids governance
+ *              exhaustion from bulk record creation in map). Summarize aggregates totals
+ *              and triggers the next M/R stage.
  */
 define([
     'N/runtime',
@@ -62,8 +67,8 @@ define([
      * Map stage: For each settlement report:
      *  - Download the TSV from Amazon
      *  - Create/find summary record (customrecord_amz_settlement)
-     *  - Create one customrecord_amz_settlement_line per TSV row
-     *  - Emit summary record ID to reduce for aggregation
+     *  - Emit each parsed row individually (keyed by unique line key)
+     *    so that reduce creates records within governance limits.
      */
     function map(context) {
         try {
@@ -135,36 +140,56 @@ define([
                 });
             }
 
-            // Create one settlement line record per TSV row
-            var lineCount = 0;
+            // Emit each row individually so reduce creates records within governance limits.
+            // Key format: summaryId|lineIndex ensures each row gets its own reduce invocation.
             for (var i = 0; i < parsed.rows.length; i++) {
-                try {
-                    createSettlementLine(configId, summaryId, report.reportId, parsed.rows[i]);
-                    lineCount++;
-                } catch (lineErr) {
-                    logger.warn(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                        'Settlement Line MR map: Error creating line ' + i + ': ' + lineErr.message);
-                }
+                context.write({
+                    key: summaryId + '|' + i,
+                    value: JSON.stringify({
+                        configId: configId,
+                        summaryId: summaryId,
+                        reportId: report.reportId,
+                        endDate: endDate || report.dataEndTime,
+                        row: parsed.rows[i]
+                    })
+                });
             }
 
             logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                'Settlement Line MR map: Created ' + lineCount + ' line records for report ' + report.reportId);
-
-            // Emit summary ID to reduce for aggregation
-            context.write({
-                key: summaryId,
-                value: JSON.stringify({
-                    summaryId: summaryId,
-                    configId: configId,
-                    reportId: report.reportId,
-                    settlementId: report.reportId,
-                    endDate: endDate || report.dataEndTime
-                })
-            });
+                'Settlement Line MR map: Emitted ' + parsed.rows.length + ' rows for reduce. Report ' +
+                report.reportId + ', summary ' + summaryId);
 
         } catch (e) {
             logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
                 'Settlement Line MR map error: ' + e.message, { details: e.stack });
+        }
+    }
+
+    /**
+     * Reduce stage: Creates one settlement line record per invocation.
+     * Each key is unique (summaryId|lineIndex) so governance is fresh per record.
+     */
+    function reduce(context) {
+        try {
+            var data = JSON.parse(context.values[0]);
+            var row = data.row;
+            if (!row) return;
+
+            createSettlementLine(data.configId, data.summaryId, data.reportId, row);
+
+            // Write summaryId so summarize can collect unique settlements for aggregation
+            context.write({
+                key: data.summaryId,
+                value: JSON.stringify({
+                    summaryId: data.summaryId,
+                    configId: data.configId,
+                    reportId: data.reportId,
+                    endDate: data.endDate
+                })
+            });
+        } catch (e) {
+            logger.warn(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                'Settlement Line MR reduce error [' + context.key + ']: ' + e.message);
         }
     }
 
@@ -314,73 +339,6 @@ define([
     }
 
     /**
-     * Reduce stage: For each summary record:
-     *  1. Aggregate line amounts into summary totals
-     *  2. Update summary record with calculated totals
-     *  3. Set status to PENDING
-     */
-    function reduce(context) {
-        var summaryId = context.key;
-
-        try {
-            // Take the first value to get config info
-            var data = JSON.parse(context.values[0]);
-            var configId = data.configId;
-            var reportId = data.reportId;
-
-            logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                'Settlement Line MR reduce: Processing summary ' + summaryId +
-                ' for report ' + reportId + ', config ' + configId);
-
-            // ---- Step 1: Aggregate line amounts ----
-            var totals = recalcSummaryTotals(summaryId);
-
-            logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                'Settlement Line MR reduce: Aggregated totals for summary ' + summaryId +
-                ' - payments: ' + totals.totalPayments +
-                ', refunds: ' + totals.totalRefunds +
-                ', otherCharges: ' + totals.totalOtherCharges +
-                ', total: ' + totals.settlementTotal);
-
-            // ---- Step 2: Update summary record with aggregated totals ----
-            var updateValues = {};
-            updateValues[STL.FIELDS.TOTAL_PAYMENTS] = totals.totalPayments;
-            updateValues[STL.FIELDS.TOTAL_REFUNDS] = totals.totalRefunds;
-            updateValues[STL.FIELDS.TOTAL_OTHER] = totals.totalOtherCharges;
-            updateValues[STL.FIELDS.TOTAL_AMOUNT] = totals.settlementTotal;
-            updateValues[STL.FIELDS.RECALC] = false;
-            updateValues[STL.FIELDS.STATUS] = constants.SETTLEMENT_STATUS.PENDING;
-
-            record.submitFields({
-                type: STL.ID,
-                id: summaryId,
-                values: updateValues
-            });
-
-            logger.success(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                'Settlement ' + reportId + ' processed with ' + totals.lineCount +
-                ' line records. Status set to PENDING.', {
-                configId: configId,
-                amazonRef: reportId
-            });
-
-        } catch (e) {
-            logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                'Settlement Line MR reduce error for summary ' + summaryId + ': ' + e.message, {
-                details: e.stack
-            });
-
-            errorQueue.enqueue({
-                type: constants.ERROR_QUEUE_TYPE.SETTLEMENT_PROCESS,
-                amazonRef: summaryId,
-                errorMsg: e.message,
-                configId: context.values[0] ? JSON.parse(context.values[0]).configId : '',
-                payload: JSON.stringify({ summaryId: summaryId })
-            });
-        }
-    }
-
-    /**
      * Aggregates settlement line amounts into summary totals.
      * Replicates the old NES_ARES_sch_amz_summary.js recalc logic using CASE WHEN SQL formulas.
      * - Total Payments = SUM(amount) WHERE tran_type='Order' AND marketplace != 'Non-Amazon'
@@ -443,6 +401,10 @@ define([
         };
     }
 
+    /**
+     * Summarize stage: After all lines are created in reduce, aggregate totals
+     * for each settlement and trigger the next M/R stage.
+     */
     function summarize(summary) {
         logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
             'Settlement Line MR summarize: Execution completed');
@@ -468,22 +430,85 @@ define([
             return true;
         });
 
+        // Collect unique summaryIds from reduce output for aggregation
+        var settlements = {};
+        summary.output.iterator().each(function (key, value) {
+            try {
+                var data = JSON.parse(value);
+                if (data.summaryId && !settlements[data.summaryId]) {
+                    settlements[data.summaryId] = data;
+                }
+            } catch (ignore) { }
+            return true;
+        });
+
+        var settleCount = Object.keys(settlements).length;
+        logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+            'Settlement Line MR summarize: Map errors: ' + mapErrors +
+            ', Reduce errors: ' + reduceErrors +
+            ', Settlements to aggregate: ' + settleCount);
+
+        // Aggregate totals for each settlement and set status to PENDING
+        for (var summaryId in settlements) {
+            if (!settlements.hasOwnProperty(summaryId)) continue;
+            var info = settlements[summaryId];
+
+            try {
+                var totals = recalcSummaryTotals(summaryId);
+
+                var updateValues = {};
+                updateValues[STL.FIELDS.TOTAL_PAYMENTS] = totals.totalPayments;
+                updateValues[STL.FIELDS.TOTAL_REFUNDS] = totals.totalRefunds;
+                updateValues[STL.FIELDS.TOTAL_OTHER] = totals.totalOtherCharges;
+                updateValues[STL.FIELDS.TOTAL_AMOUNT] = totals.settlementTotal;
+                updateValues[STL.FIELDS.RECALC] = false;
+                updateValues[STL.FIELDS.STATUS] = constants.SETTLEMENT_STATUS.PENDING;
+
+                record.submitFields({
+                    type: STL.ID,
+                    id: summaryId,
+                    values: updateValues
+                });
+
+                logger.success(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                    'Settlement ' + info.reportId + ' processed with ' + totals.lineCount +
+                    ' line records. Status set to PENDING.', {
+                    configId: info.configId,
+                    amazonRef: info.reportId
+                });
+            } catch (aggErr) {
+                logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                    'Settlement Line MR summarize: Aggregation error for summary ' + summaryId +
+                    ': ' + aggErr.message);
+
+                errorQueue.enqueue({
+                    type: constants.ERROR_QUEUE_TYPE.SETTLEMENT_PROCESS,
+                    amazonRef: summaryId,
+                    errorMsg: aggErr.message,
+                    configId: info.configId,
+                    payload: JSON.stringify({ summaryId: summaryId })
+                });
+            }
+        }
+
         logger.success(constants.LOG_TYPE.SETTLEMENT_SYNC,
             'Settlement Line MR complete. Map errors: ' + mapErrors + ', Reduce errors: ' + reduceErrors);
 
         // Trigger settlement reconciliation M/R to process PENDING settlements
-        try {
-            var mrTask = task.create({
-                taskType: task.TaskType.MAP_REDUCE,
-                scriptId: constants.SCRIPT_IDS.MR_SETTLE_PROCESS,
-                deploymentId: constants.DEPLOY_IDS.MR_SETTLE_PROCESS
-            });
-            var taskId = mrTask.submit();
-            logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                'Settlement Line MR summarize: Triggered settlement process MR. Task ID: ' + taskId);
-        } catch (triggerErr) {
-            logger.warn(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                'Settlement Line MR summarize: Could not trigger settlement process MR: ' + triggerErr.message);
+        if (settleCount > 0) {
+            try {
+                var mrTask = task.create({
+                    taskType: task.TaskType.MAP_REDUCE,
+                    scriptId: constants.SCRIPT_IDS.MR_SETTLE_PROCESS,
+                    deploymentId: constants.DEPLOY_IDS.MR_SETTLE_PROCESS
+                });
+                var taskId = mrTask.submit();
+                logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                    'Settlement Line MR summarize: Triggered settlement process MR. Task ID: ' + taskId);
+            } catch (triggerErr) {
+                logger.warn(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                    'Settlement Line MR summarize: Could not trigger settlement process MR: ' + triggerErr.message);
+            }
         }
     }
 
