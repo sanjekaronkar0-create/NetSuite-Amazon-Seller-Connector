@@ -50,6 +50,9 @@ define([
             'settlementService.downloadSettlementReport: Fetching report document URL from Amazon for reportDocumentId: ' + reportDocumentId);
 
         const docResponse = amazonClient.getReportDocument(config, reportDocumentId);
+        if (!docResponse || !docResponse.url) {
+            throw new Error('No download URL returned from Amazon for reportDocumentId: ' + reportDocumentId);
+        }
         const downloadUrl = docResponse.url;
 
         logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
@@ -177,23 +180,44 @@ define([
 
     /**
      * Categorizes a settlement row amount into summary buckets.
+     * Amazon SP-API amount-type values: ItemPrice, ItemFees, Promotion, ItemWithheldTax,
+     * DirectPayment, Other, etc. Also uses amount-description and transaction-type for
+     * more granular categorization.
      */
     function categorizeAmount(row, summary) {
         const amount = parseFloat(row['amount'] || row['total'] || 0);
         const type = (row['amount-type'] || row['type'] || '').toLowerCase();
+        const desc = (row['amount-description'] || row['description'] || '').toLowerCase();
+        const tranType = (row['transaction-type'] || '').toLowerCase();
 
-        if (type.includes('productcharges') || type.includes('itemcharge')) {
-            summary.productCharges += amount;
-        } else if (type.includes('shippingcredits') || type.includes('shipping')) {
-            summary.shippingCredits += amount;
-        } else if (type.includes('promotion') || type.includes('promo')) {
+        // Refund transaction type takes priority
+        if (tranType === 'refund') {
+            summary.refunds += amount;
+        // ItemPrice = product revenue (Principal, Shipping, GiftWrap, etc.)
+        } else if (type === 'itemprice' || type === 'itemcharge' || type.includes('productcharges')) {
+            if (desc.includes('shipping') || desc.includes('shippingcharge') || desc.includes('shippingtax')) {
+                summary.shippingCredits += amount;
+            } else {
+                summary.productCharges += amount;
+            }
+        // Promotion = promotional rebates
+        } else if (type === 'promotion' || type.includes('promo')) {
             summary.promoRebates += amount;
-        } else if (type.includes('sellingfees') || type.includes('commission')) {
-            summary.sellingFees += amount;
+        // ItemFees = selling fees, FBA fees, etc.
+        } else if (type === 'itemfees' || type.includes('sellingfees') || type.includes('commission')) {
+            if (desc.includes('fba') || desc.includes('fulfillment') || desc.includes('fbaperunit') ||
+                desc.includes('fbaweightbasedfe') || desc.includes('pickpack')) {
+                summary.fbaFees += amount;
+            } else {
+                summary.sellingFees += amount;
+            }
+        // Direct FBA-related type match
         } else if (type.includes('fba') || type.includes('fulfillment')) {
             summary.fbaFees += amount;
-        } else if (type.includes('refund')) {
-            summary.refunds += amount;
+        // ShippingCredits / ShippingChargeback
+        } else if (type.includes('shipping')) {
+            summary.shippingCredits += amount;
+        // Everything else (Other, DirectPayment, etc.)
         } else {
             summary.otherFees += amount;
         }

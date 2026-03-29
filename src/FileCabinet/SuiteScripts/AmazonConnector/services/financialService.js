@@ -253,6 +253,13 @@ define([
             lineCount++;
         }
 
+        if (lineCount === 0) {
+            logger.warn(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                'financialService.createSettlementInvoice: No lines added for order ' + orderId +
+                '. Skipping invoice creation - check charge map configuration.');
+            return { invoiceId: null, paymentTotal: paymentTotal };
+        }
+
         var invoiceId = inv.save({ ignoreMandatoryFields: true });
 
         logger.success(constants.LOG_TYPE.SETTLEMENT_SYNC,
@@ -368,6 +375,13 @@ define([
             }
             cm.commitLine({ sublistId: 'item' });
             lineCount++;
+        }
+
+        if (lineCount === 0) {
+            logger.warn(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                'financialService.createSettlementCreditMemo: No lines added for order ' + orderId +
+                '. Skipping credit memo creation - check charge map configuration.');
+            return null;
         }
 
         var creditMemoId = cm.save({ ignoreMandatoryFields: true });

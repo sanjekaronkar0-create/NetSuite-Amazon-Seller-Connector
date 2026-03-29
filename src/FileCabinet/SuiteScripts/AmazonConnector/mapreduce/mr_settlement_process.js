@@ -473,11 +473,15 @@ define([
         var jeIds = [];
 
         // Check trigger conditions (like old process)
-        if (expectedTotal && totalAmount && parseFloat(expectedTotal) !== parseFloat(totalAmount)) {
-            logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
-                'Phase D: Expected total (' + expectedTotal + ') != actual total (' + totalAmount +
-                ') for settlement ' + reportId + '. Skipping JE creation.');
-            return jeIds;
+        if (expectedTotal && totalAmount) {
+            var totalDiff = Math.abs(parseFloat(expectedTotal) - parseFloat(totalAmount));
+            if (totalDiff > 0.01) {
+                logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
+                    'Phase D: Expected total (' + expectedTotal + ') != actual total (' + totalAmount +
+                    '), diff=' + totalDiff.toFixed(4) +
+                    ' for settlement ' + reportId + '. Skipping JE creation.');
+                return jeIds;
+            }
         }
 
         // Check if JEs already exist
@@ -607,7 +611,12 @@ define([
             if (acct) {
                 currentJe.selectNewLine({ sublistId: 'line' });
                 currentJe.setCurrentSublistValue({ sublistId: 'line', fieldId: 'account', value: acct });
-                currentJe.setCurrentSublistValue({ sublistId: 'line', fieldId: 'credit', value: Math.abs(amt) });
+                // Use sign-aware logic: positive amounts are credits, negative amounts (reimbursements) are debits
+                if (amt < 0) {
+                    currentJe.setCurrentSublistValue({ sublistId: 'line', fieldId: 'debit', value: Math.abs(amt) });
+                } else {
+                    currentJe.setCurrentSublistValue({ sublistId: 'line', fieldId: 'credit', value: amt });
+                }
                 currentJe.setCurrentSublistValue({
                     sublistId: 'line', fieldId: 'memo',
                     value: desc + ' - ' + reportId
@@ -721,7 +730,13 @@ define([
 
         je.selectNewLine({ sublistId: 'line' });
         je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'account', value: debitAccount });
-        je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'debit', value: Math.abs(total) });
+        // Sign-aware balancing: positive total means net credits on charge lines, so balance with debit;
+        // negative total means net debits on charge lines, so balance with credit
+        if (total >= 0) {
+            je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'debit', value: Math.abs(total) });
+        } else {
+            je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'credit', value: Math.abs(total) });
+        }
         je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'memo', value: 'Cash - ' + settlementId });
         je.commitLine({ sublistId: 'line' });
     }
