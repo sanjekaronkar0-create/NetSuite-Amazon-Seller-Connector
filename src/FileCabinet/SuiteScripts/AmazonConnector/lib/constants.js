@@ -87,13 +87,12 @@ define([], function () {
                 // Order Cancellation
                 CANCEL_SYNC_ENABLED: 'custrecord_amz_cfg_cancel_enabled',
                 CANCEL_ACTION: 'custrecord_amz_cfg_cancel_action',
-                // Column-Item Mapping Usage Scope
-                COL_MAP_ORDERS: 'custrecord_amz_cfg_col_map_orders',
-                COL_MAP_SETTLE: 'custrecord_amz_cfg_col_map_settle',
-                // Settlement Transaction Configuration
-                SETTLE_TRAN_TYPE: 'custrecord_amz_cfg_settle_tran_type',
-                JE_GROUPING: 'custrecord_amz_cfg_je_grouping',
-                USE_CHARGE_MAP: 'custrecord_amz_cfg_use_charge_map'
+                // Settlement Configuration
+                USE_CHARGE_MAP: 'custrecord_amz_cfg_use_charge_map',
+                DEFAULT_FEE_ACCT_CAD: 'custrecord_amz_cfg_fee_acct_cad',
+                DEFAULT_FEE_ACCT_MXN: 'custrecord_amz_cfg_fee_acct_mxn',
+                REFUND_PAY_ACCT: 'custrecord_amz_cfg_refund_pay_acct',
+                SETTLE_INV_FORM: 'custrecord_amz_cfg_settle_inv_form'
             }
         },
         LOG: {
@@ -221,14 +220,22 @@ define([], function () {
                 DATE: 'custrecord_amz_ret_date'
             }
         },
-        COLUMN_ITEM_MAP: {
-            ID: 'customrecord_amz_column_item_map',
+        SETTLE_HEADER: {
+            ID: 'customrecord_amz_settle_header',
             FIELDS: {
-                COLUMN_NAME: 'custrecord_amz_cim_column_name',
-                ITEM: 'custrecord_amz_cim_item',
-                USE_IN_ORDERS: 'custrecord_amz_cim_use_in_orders',
-                USE_IN_SETTLE: 'custrecord_amz_cim_use_in_settle',
-                CONFIG: 'custrecord_amz_cim_config'
+                ORDER_ID: 'custrecord_amz_sh_order_id',
+                MARKETPLACE: 'custrecord_amz_sh_marketplace',
+                INVOICE_REC: 'custrecord_amz_sh_invoice_rec',
+                PAYMENT_REC: 'custrecord_amz_sh_payment_rec',
+                CUSTOMER: 'custrecord_amz_sh_customer',
+                CREDIT_MEMO: 'custrecord_amz_sh_credit_memo',
+                REFUND: 'custrecord_amz_sh_refund',
+                DATA_LOADED: 'custrecord_amz_sh_data_loaded',
+                REFUND_REQUIRED: 'custrecord_amz_sh_refund_req',
+                UPDATE_INV: 'custrecord_amz_sh_update_inv',
+                ERROR: 'custrecord_amz_sh_error',
+                CONFIG: 'custrecord_amz_sh_config',
+                SUMMARY: 'custrecord_amz_sh_summary'
             }
         },
         MARKETPLACE_CFG: {
@@ -255,7 +262,10 @@ define([], function () {
                 ACCOUNT: 'custrecord_amz_cm_account',
                 CURRENCY: 'custrecord_amz_cm_currency',
                 CONFIG: 'custrecord_amz_cm_config',
-                DEFAULT_ACCOUNT: 'custrecord_amz_cm_default_account'
+                DEFAULT_ACCOUNT: 'custrecord_amz_cm_default_account',
+                ITEM_US: 'custrecord_amz_cm_item_us',
+                ITEM_CA: 'custrecord_amz_cm_item_ca',
+                ITEM_MX: 'custrecord_amz_cm_item_mx'
             }
         },
         ERROR_QUEUE: {
@@ -361,16 +371,6 @@ define([], function () {
         CANCEL_PROCESS: 'CANCEL_PROCESS',
         FBA_INVENTORY: 'FBA_INVENTORY',
         CATALOG_SYNC: 'CATALOG_SYNC'
-    };
-
-    const SETTLEMENT_TRAN_TYPE = {
-        DEPOSIT: 'DEPOSIT',
-        INVOICE: 'INVOICE'
-    };
-
-    const JE_GROUPING = {
-        PER_SETTLEMENT: 'PER_SETTLEMENT',
-        BY_MONTH: 'BY_MONTH'
     };
 
     // ============================================================
@@ -574,8 +574,6 @@ define([], function () {
         RETURN_STATUS,
         ERROR_QUEUE_STATUS,
         ERROR_QUEUE_TYPE,
-        SETTLEMENT_TRAN_TYPE,
-        JE_GROUPING,
         SP_API_ENDPOINTS,
         LWA_TOKEN_URL,
         MARKETPLACE_IDS,

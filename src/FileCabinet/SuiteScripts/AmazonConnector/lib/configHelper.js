@@ -8,7 +8,6 @@
 define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (search, record, log, runtime, constants) {
 
     const CR = constants.CUSTOM_RECORDS.CONFIG;
-    const CIM = constants.CUSTOM_RECORDS.COLUMN_ITEM_MAP;
     const MKT = constants.CUSTOM_RECORDS.MARKETPLACE_CFG;
     const CHG = constants.CUSTOM_RECORDS.CHARGE_MAP;
     var _isOneWorld = null;
@@ -45,7 +44,10 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
         CR.FIELDS.TAX_CODE,
         CR.FIELDS.SALES_ORDER_FORM,
         CR.FIELDS.CASH_SALE_FORM,
-        CR.FIELDS.INVOICE_FORM
+        CR.FIELDS.INVOICE_FORM,
+        CR.FIELDS.DEFAULT_FEE_ACCT_CAD,
+        CR.FIELDS.DEFAULT_FEE_ACCT_MXN,
+        CR.FIELDS.REFUND_PAY_ACCT
     ];
 
     // Map from field ID to config property name for lookup-only fields.
@@ -68,6 +70,9 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
     LOOKUP_FIELD_MAP[CR.FIELDS.SALES_ORDER_FORM] = 'salesOrderForm';
     LOOKUP_FIELD_MAP[CR.FIELDS.CASH_SALE_FORM] = 'cashSaleForm';
     LOOKUP_FIELD_MAP[CR.FIELDS.INVOICE_FORM] = 'invoiceForm';
+    LOOKUP_FIELD_MAP[CR.FIELDS.DEFAULT_FEE_ACCT_CAD] = 'defaultFeeAcctCad';
+    LOOKUP_FIELD_MAP[CR.FIELDS.DEFAULT_FEE_ACCT_MXN] = 'defaultFeeAcctMxn';
+    LOOKUP_FIELD_MAP[CR.FIELDS.REFUND_PAY_ACCT] = 'refundPayAcct';
 
     /**
      * Extracts the value from a lookupFields result entry.
@@ -211,13 +216,12 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
             // Cancellation
             cancelSyncEnabled: result.getValue(CR.FIELDS.CANCEL_SYNC_ENABLED),
             cancelAction: result.getValue(CR.FIELDS.CANCEL_ACTION) || 'close',
-            // Column-Item Mapping Usage Scope
-            colMapOrders: result.getValue(CR.FIELDS.COL_MAP_ORDERS),
-            colMapSettle: result.getValue(CR.FIELDS.COL_MAP_SETTLE),
-            // Settlement Transaction Configuration
-            settleTranType: result.getValue(CR.FIELDS.SETTLE_TRAN_TYPE) || constants.SETTLEMENT_TRAN_TYPE.DEPOSIT,
-            jeGrouping: result.getValue(CR.FIELDS.JE_GROUPING) || constants.JE_GROUPING.PER_SETTLEMENT,
-            useChargeMap: result.getValue(CR.FIELDS.USE_CHARGE_MAP)
+            // Settlement Configuration
+            useChargeMap: result.getValue(CR.FIELDS.USE_CHARGE_MAP),
+            defaultFeeAcctCad: null,
+            defaultFeeAcctMxn: null,
+            refundPayAcct: null,
+            settleInvForm: result.getValue(CR.FIELDS.SETTLE_INV_FORM)
         };
     }
 
@@ -294,80 +298,13 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
             // Cancellation
             cancelSyncEnabled: getValue(CR.FIELDS.CANCEL_SYNC_ENABLED),
             cancelAction: getValue(CR.FIELDS.CANCEL_ACTION) || 'close',
-            // Column-Item Mapping Usage Scope
-            colMapOrders: getValue(CR.FIELDS.COL_MAP_ORDERS),
-            colMapSettle: getValue(CR.FIELDS.COL_MAP_SETTLE),
-            // Settlement Transaction Configuration
-            settleTranType: getValue(CR.FIELDS.SETTLE_TRAN_TYPE) || constants.SETTLEMENT_TRAN_TYPE.DEPOSIT,
-            jeGrouping: getValue(CR.FIELDS.JE_GROUPING) || constants.JE_GROUPING.PER_SETTLEMENT,
-            useChargeMap: getValue(CR.FIELDS.USE_CHARGE_MAP)
+            // Settlement Configuration
+            useChargeMap: getValue(CR.FIELDS.USE_CHARGE_MAP),
+            defaultFeeAcctCad: getValue(CR.FIELDS.DEFAULT_FEE_ACCT_CAD),
+            defaultFeeAcctMxn: getValue(CR.FIELDS.DEFAULT_FEE_ACCT_MXN),
+            refundPayAcct: getValue(CR.FIELDS.REFUND_PAY_ACCT),
+            settleInvForm: getValue(CR.FIELDS.SETTLE_INV_FORM)
         };
-    }
-
-    /**
-     * Loads all column-to-item mappings for a given config.
-     * @param {string|number} configId
-     * @param {Object} [options] - { useInOrders: boolean, useInSettle: boolean }
-     * @returns {Array<Object>} Array of { columnName, itemId, useInOrders, useInSettle }
-     */
-    function getColumnItemMappings(configId, options) {
-        var mappings = [];
-        var filters = [[CIM.FIELDS.CONFIG, 'anyof', configId]];
-
-        if (options && options.useInOrders) {
-            filters.push('AND');
-            filters.push([CIM.FIELDS.USE_IN_ORDERS, 'is', 'T']);
-        }
-        if (options && options.useInSettle) {
-            filters.push('AND');
-            filters.push([CIM.FIELDS.USE_IN_SETTLE, 'is', 'T']);
-        }
-
-        search.create({
-            type: CIM.ID,
-            filters: filters,
-            columns: [CIM.FIELDS.COLUMN_NAME, CIM.FIELDS.USE_IN_ORDERS, CIM.FIELDS.USE_IN_SETTLE]
-        }).run().each(function (result) {
-            var itemVal = null;
-            try {
-                var looked = search.lookupFields({
-                    type: CIM.ID,
-                    id: result.id,
-                    columns: [CIM.FIELDS.ITEM]
-                });
-                itemVal = extractLookupValue(looked[CIM.FIELDS.ITEM]);
-            } catch (e) {
-                log.debug({ title: 'getColumnItemMappings', details: 'lookupFields error: ' + e.message });
-            }
-
-            mappings.push({
-                id: result.id,
-                columnName: (result.getValue(CIM.FIELDS.COLUMN_NAME) || '').toLowerCase().trim(),
-                itemId: itemVal,
-                useInOrders: result.getValue(CIM.FIELDS.USE_IN_ORDERS) === true || result.getValue(CIM.FIELDS.USE_IN_ORDERS) === 'T',
-                useInSettle: result.getValue(CIM.FIELDS.USE_IN_SETTLE) === true || result.getValue(CIM.FIELDS.USE_IN_SETTLE) === 'T'
-            });
-            return true;
-        });
-
-        return mappings;
-    }
-
-    /**
-     * Builds a lookup map from column name to item ID.
-     * @param {string|number} configId
-     * @param {Object} [options] - { useInOrders: boolean, useInSettle: boolean }
-     * @returns {Object} Map of lowercase column name to item internal ID
-     */
-    function getColumnItemMap(configId, options) {
-        var mappings = getColumnItemMappings(configId, options);
-        var map = {};
-        mappings.forEach(function (m) {
-            if (m.columnName && m.itemId) {
-                map[m.columnName] = m.itemId;
-            }
-        });
-        return map;
     }
 
     /**
@@ -496,11 +433,11 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
 
     /**
      * Loads Amazon Charge Account Map records and returns a lookup map.
-     * Maps lowercase charge description to GL account internal ID.
-     * Supports optional currency and config filtering (like old customrecord_amazon_other_charge).
+     * Maps lowercase charge description to GL account and per-marketplace items.
+     * Supports optional currency and config filtering (like old customrecord_amazon_other_charge + customrecord_amazon_sku_table combined).
      * @param {string|number} [configId] - Optional config ID to filter by
-     * @param {string} [currency] - Optional currency code to filter by
-     * @returns {Object} { map: {chargeName: accountId}, defaultAccount: accountId|null }
+     * @param {string} [currency] - Optional NS currency internal ID to filter by
+     * @returns {Object} { map: {chargeName: {account, itemUs, itemCa, itemMx}}, defaultAccount: accountId|null }
      */
     function getChargeAccountMap(configId, currency) {
         var chargeMap = {};
@@ -529,22 +466,29 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
                 var looked = search.lookupFields({
                     type: CHG.ID,
                     id: result.id,
-                    columns: [CHG.FIELDS.ACCOUNT, CHG.FIELDS.CURRENCY, CHG.FIELDS.DEFAULT_ACCOUNT]
+                    columns: [CHG.FIELDS.ACCOUNT, CHG.FIELDS.CURRENCY, CHG.FIELDS.DEFAULT_ACCOUNT,
+                        CHG.FIELDS.ITEM_US, CHG.FIELDS.ITEM_CA, CHG.FIELDS.ITEM_MX]
                 });
 
                 var accountVal = extractLookupValue(looked[CHG.FIELDS.ACCOUNT]);
                 var currencyVal = extractLookupValue(looked[CHG.FIELDS.CURRENCY]);
                 var defaultAcctVal = extractLookupValue(looked[CHG.FIELDS.DEFAULT_ACCOUNT]);
+                var itemUsVal = extractLookupValue(looked[CHG.FIELDS.ITEM_US]);
+                var itemCaVal = extractLookupValue(looked[CHG.FIELDS.ITEM_CA]);
+                var itemMxVal = extractLookupValue(looked[CHG.FIELDS.ITEM_MX]);
 
                 // If currency filter is set on the record, only use it for matching currency
                 if (currencyVal && currency) {
-                    // Currency record value is an internal ID; compare with provided currency
-                    // Skip this mapping if currencies don't match
                     if (String(currencyVal) !== String(currency)) return true;
                 }
 
-                if (accountVal && chargeName) {
-                    chargeMap[chargeName] = accountVal;
+                if (chargeName) {
+                    chargeMap[chargeName] = {
+                        account: accountVal || null,
+                        itemUs: itemUsVal || null,
+                        itemCa: itemCaVal || null,
+                        itemMx: itemMxVal || null
+                    };
                 }
 
                 // Capture default fallback account if present
@@ -565,8 +509,6 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
         getAllConfigs,
         getConfig,
         updateLastSync,
-        getColumnItemMappings,
-        getColumnItemMap,
         getMarketplaceConfigs,
         getMarketplaceConfig,
         resolveMarketplaceSettings,
