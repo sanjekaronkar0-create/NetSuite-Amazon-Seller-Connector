@@ -84,13 +84,13 @@ define([
                         reports: readyReports
                     }, 'settlements');
 
-                    // Delegate bulk processing to Map/Reduce
+                    // Delegate bulk processing to Map/Reduce (settlement line process)
                     var mrTask = task.create({
                         taskType: task.TaskType.MAP_REDUCE,
-                        scriptId: constants.SCRIPT_IDS.MR_SETTLE_PROCESS,
-                        deploymentId: constants.DEPLOY_IDS.MR_SETTLE_PROCESS,
+                        scriptId: constants.SCRIPT_IDS.MR_SETTLE_LINE,
+                        deploymentId: constants.DEPLOY_IDS.MR_SETTLE_LINE,
                         params: {
-                            custscript_amz_mr_settle_data: String(fileId)
+                            custscript_amz_mr_stl_line_data: String(fileId)
                         }
                     });
 

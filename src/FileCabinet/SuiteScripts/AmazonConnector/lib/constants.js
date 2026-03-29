@@ -173,7 +173,37 @@ define([], function () {
                 NS_JOURNALS: 'custrecord_amz_stl_ns_journals',
                 SETTLEMENT_FILE: 'custrecord_amz_stl_file',
                 STATUS: 'custrecord_amz_stl_status',
-                CONFIG: 'custrecord_amz_stl_config'
+                CONFIG: 'custrecord_amz_stl_config',
+                EXPECTED_TOTAL: 'custrecord_amz_stl_expected_total',
+                TOTAL_PAYMENTS: 'custrecord_amz_stl_total_payments',
+                TOTAL_REFUNDS: 'custrecord_amz_stl_total_refunds',
+                TOTAL_OTHER: 'custrecord_amz_stl_total_other',
+                RECALC: 'custrecord_amz_stl_recalc',
+                NO_JE: 'custrecord_amz_stl_no_je',
+                DEPOSIT_DATE: 'custrecord_amz_stl_deposit_date'
+            }
+        },
+        SETTLEMENT_LINE: {
+            ID: 'customrecord_amz_settlement_line',
+            FIELDS: {
+                SETTLEMENT_ID: 'custrecord_amz_sl_settlement_id',
+                ORDER_ID: 'custrecord_amz_sl_order_id',
+                MARKETPLACE: 'custrecord_amz_sl_marketplace',
+                TRAN_TYPE: 'custrecord_amz_sl_tran_type',
+                AMOUNT_TYPE: 'custrecord_amz_sl_amount_type',
+                AMOUNT_DESC: 'custrecord_amz_sl_amount_desc',
+                AMOUNT: 'custrecord_amz_sl_amount',
+                CURRENCY: 'custrecord_amz_sl_currency',
+                SKU: 'custrecord_amz_sl_sku',
+                QUANTITY: 'custrecord_amz_sl_quantity',
+                POST_DATE: 'custrecord_amz_sl_post_date',
+                POST_DATE_NS: 'custrecord_amz_sl_post_date_ns',
+                POST_PERIOD: 'custrecord_amz_sl_post_period',
+                MERCHANT_ID: 'custrecord_amz_sl_merchant_id',
+                PROMO_ID: 'custrecord_amz_sl_promo_id',
+                PROCESSED: 'custrecord_amz_sl_processed',
+                SUMMARY: 'custrecord_amz_sl_summary',
+                CONFIG: 'custrecord_amz_sl_config'
             }
         },
         RETURN_MAP: {
@@ -502,6 +532,7 @@ define([], function () {
         MR_ORDER_IMPORT: 'customscript_amz_mr_order_import',
         MR_INV_EXPORT: 'customscript_amz_mr_inv_export',
         MR_SETTLE_PROCESS: 'customscript_amz_mr_settle_process',
+        MR_SETTLE_LINE: 'customscript_amz_mr_settle_line',
         MR_RETURN_PROCESS: 'customscript_amz_mr_return_process',
         SL_CONFIG: 'customscript_amz_sl_config',
         RL_WEBHOOK: 'customscript_amz_rl_webhook',
@@ -524,6 +555,7 @@ define([], function () {
         MR_ORDER_IMPORT: 'customdeploy_amz_mr_order_import',
         MR_INV_EXPORT: 'customdeploy_amz_mr_inv_export',
         MR_SETTLE_PROCESS: 'customdeploy_amz_mr_settle_process',
+        MR_SETTLE_LINE: 'customdeploy_amz_mr_settle_line',
         MR_RETURN_PROCESS: 'customdeploy_amz_mr_return_process',
         SL_CONFIG: 'customdeploy_amz_sl_config',
         RL_WEBHOOK: 'customdeploy_amz_rl_webhook',
