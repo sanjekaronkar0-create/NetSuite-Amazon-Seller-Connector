@@ -13,13 +13,14 @@ define([
     'N/search',
     'N/format',
     'N/log',
+    'N/task',
     '../lib/constants',
     '../lib/configHelper',
     '../lib/errorQueue',
     '../lib/logger',
     '../lib/mrDataHelper',
     '../services/settlementService'
-], function (runtime, record, search, format, log, constants, configHelper, errorQueue, logger, mrDataHelper,
+], function (runtime, record, search, format, log, task, constants, configHelper, errorQueue, logger, mrDataHelper,
     settlementService) {
 
     const STL = constants.CUSTOM_RECORDS.SETTLEMENT;
@@ -436,6 +437,21 @@ define([
 
         logger.success(constants.LOG_TYPE.SETTLEMENT_SYNC,
             'Settlement Line MR complete. Map errors: ' + mapErrors + ', Reduce errors: ' + reduceErrors);
+
+        // Trigger settlement reconciliation M/R to process PENDING settlements
+        try {
+            var mrTask = task.create({
+                taskType: task.TaskType.MAP_REDUCE,
+                scriptId: constants.SCRIPT_IDS.MR_SETTLE_PROCESS,
+                deploymentId: constants.DEPLOY_IDS.MR_SETTLE_PROCESS
+            });
+            var taskId = mrTask.submit();
+            logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                'Settlement Line MR summarize: Triggered settlement process MR. Task ID: ' + taskId);
+        } catch (triggerErr) {
+            logger.warn(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                'Settlement Line MR summarize: Could not trigger settlement process MR: ' + triggerErr.message);
+        }
     }
 
     return { getInputData, map, reduce, summarize };

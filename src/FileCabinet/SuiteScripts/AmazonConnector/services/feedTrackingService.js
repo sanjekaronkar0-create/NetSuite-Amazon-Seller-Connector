@@ -145,7 +145,6 @@ define([
     return {
         checkFeedStatus,
         getFeedResult,
-        parseFeedResult,
         trackFeedCompletion
     };
 });

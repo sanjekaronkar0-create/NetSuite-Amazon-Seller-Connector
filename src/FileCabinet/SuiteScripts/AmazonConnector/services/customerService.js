@@ -253,10 +253,6 @@ define([
     }
 
     return {
-        resolveCustomer,
-        findCustomerByEmail,
-        findCustomerByName,
-        createCustomerFromOrder,
-        updateCustomerAddress
+        resolveCustomer
     };
 });

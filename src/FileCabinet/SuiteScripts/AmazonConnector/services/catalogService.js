@@ -217,7 +217,6 @@ define([
     return {
         requestListingsReport,
         downloadListingsReport,
-        parseListingsReport,
         findExistingMapping,
         autoMatchNetSuiteItem,
         upsertItemMapping,

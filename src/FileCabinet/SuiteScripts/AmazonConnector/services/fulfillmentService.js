@@ -227,7 +227,6 @@ define([
         getAmazonOrderForSalesOrder,
         getTrackingInfo,
         buildFulfillmentFeedXml,
-        submitFulfillmentFeed,
-        mapCarrier
+        submitFulfillmentFeed
     };
 });

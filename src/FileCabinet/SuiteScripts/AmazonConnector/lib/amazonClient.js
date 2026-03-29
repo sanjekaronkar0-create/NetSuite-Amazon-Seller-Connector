@@ -239,13 +239,6 @@ define(['N/https', 'N/log', './amazonAuth', './constants', './logger'],
     }
 
     /**
-     * Gets order buyer info.
-     */
-    function getOrderBuyerInfo(config, orderId) {
-        return get({ config, path: '/orders/v0/orders/' + orderId + '/buyerInfo' });
-    }
-
-    /**
      * Gets order shipping address.
      */
     function getOrderAddress(config, orderId) {
@@ -400,7 +393,6 @@ define(['N/https', 'N/log', './amazonAuth', './constants', './logger'],
         busyWait,
         getOrders,
         getOrderItems,
-        getOrderBuyerInfo,
         getOrderAddress,
         createFeedDocument,
         createFeed,

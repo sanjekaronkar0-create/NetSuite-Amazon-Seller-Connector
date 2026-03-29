@@ -79,13 +79,6 @@ define([
     }
 
     /**
-     * Backwards-compatible alias for getLinkedOrder.
-     */
-    function getLinkedSalesOrder(amazonOrderId) {
-        return getLinkedOrder(amazonOrderId);
-    }
-
-    /**
      * Creates a NetSuite Return Authorization from an Amazon return.
      * @param {Object} config
      * @param {Object} returnData - Amazon return info
@@ -250,7 +243,6 @@ define([
         requestReturnsReport,
         isReturnProcessed,
         getLinkedOrder,
-        getLinkedSalesOrder,
         createReturnAuthorization,
         createCreditMemoFromInvoice,
         createReturnMapRecord,
