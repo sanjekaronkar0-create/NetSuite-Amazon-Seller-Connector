@@ -50,6 +50,9 @@ define([
             'settlementService.downloadSettlementReport: Fetching report document URL from Amazon for reportDocumentId: ' + reportDocumentId);
 
         const docResponse = amazonClient.getReportDocument(config, reportDocumentId);
+        if (!docResponse || !docResponse.url) {
+            throw new Error('No download URL returned from Amazon for reportDocumentId: ' + reportDocumentId);
+        }
         const downloadUrl = docResponse.url;
 
         logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,

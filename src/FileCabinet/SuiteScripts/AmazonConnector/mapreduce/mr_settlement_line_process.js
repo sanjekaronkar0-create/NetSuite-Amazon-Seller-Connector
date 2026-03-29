@@ -93,7 +93,9 @@ define([
             if (existingId) {
                 summaryId = existingId;
                 logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                    'Settlement Line MR map: Reusing existing summary record ' + existingId);
+                    'Settlement Line MR map: Reusing existing summary record ' + existingId +
+                    '. Deleting existing lines to prevent duplicates on re-run.');
+                deleteExistingLines(summaryId);
             } else {
                 summaryId = settlementService.createSettlementRecord(config, report, parsed.summary);
                 logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
@@ -278,6 +280,37 @@ define([
             return results[0].id;
         }
         return null;
+    }
+
+    /**
+     * Deletes all existing settlement line records for a given summary.
+     * Prevents duplicate lines when the map stage re-runs after a partial failure.
+     * @param {string|number} summaryId - Settlement summary record internal ID
+     */
+    function deleteExistingLines(summaryId) {
+        var lineIds = [];
+        search.create({
+            type: SL.ID,
+            filters: [[SL.FIELDS.SUMMARY, 'anyof', summaryId]],
+            columns: ['internalid']
+        }).run().each(function (result) {
+            lineIds.push(result.id);
+            return true;
+        });
+
+        if (lineIds.length === 0) return;
+
+        logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+            'deleteExistingLines: Deleting ' + lineIds.length + ' existing line(s) for summary ' + summaryId);
+
+        for (var i = 0; i < lineIds.length; i++) {
+            try {
+                record.delete({ type: SL.ID, id: lineIds[i] });
+            } catch (e) {
+                logger.warn(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                    'deleteExistingLines: Could not delete line ' + lineIds[i] + ': ' + e.message);
+            }
+        }
     }
 
     /**
