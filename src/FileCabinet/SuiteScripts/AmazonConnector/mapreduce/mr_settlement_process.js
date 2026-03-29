@@ -2,525 +2,786 @@
  * @NApiVersion 2.1
  * @NScriptType MapReduceScript
  * @NModuleScope SameAccount
- * @description Map/Reduce script for processing Amazon settlement reports in bulk.
- *              Creates Deposits and Journal Entries for financial reconciliation.
+ * @description Map/Reduce script for processing Amazon settlements following the old process flow:
+ *              Phase A: Create/link order headers per unique order_id
+ *              Phase B: Create invoices + customer payments per order
+ *              Phase C: Create credit memos + customer refunds for refund lines
+ *              Phase D: Create JEs for other charges grouped by month
  */
 define([
     'N/runtime',
+    'N/record',
+    'N/search',
+    'N/format',
     'N/log',
     '../lib/constants',
     '../lib/configHelper',
     '../lib/errorQueue',
     '../lib/logger',
-    '../lib/mrDataHelper',
-    '../services/settlementService',
     '../services/financialService'
-], function (runtime, log, constants, configHelper, errorQueue, logger, mrDataHelper,
-    settlementService, financialService) {
+], function (runtime, record, search, format, log, constants, configHelper, errorQueue, logger,
+    financialService) {
+
+    const STL = constants.CUSTOM_RECORDS.SETTLEMENT;
+    const SL = constants.CUSTOM_RECORDS.SETTLEMENT_LINE;
+    const SH = constants.CUSTOM_RECORDS.SETTLE_HEADER;
 
     /**
-     * Input stage: gets settlement records pending reconciliation.
-     * Parameter contains a File Cabinet file ID when triggered by scheduled script.
+     * Input stage: finds settlements with status = PENDING.
      */
     function getInputData() {
         logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-            'Settlement MR getInputData: Starting input stage');
-
-        const dataParam = runtime.getCurrentScript().getParameter({
-            name: 'custscript_amz_mr_settle_data'
-        });
-
-        if (dataParam) {
-            logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                'Settlement MR getInputData: Reading data file (File Cabinet ID: ' + dataParam + ')');
-
-            var fileData = mrDataHelper.readDataFile(dataParam);
-            var configId = fileData.configId;
-            var reports = fileData.reports || [];
-
-            logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                'Settlement MR getInputData: Found ' + reports.length +
-                ' report(s) for config ' + configId + ' from data file');
-
-            // Embed configId in each report so map() can access it,
-            // and return the array so MR iterates individual reports
-            for (var i = 0; i < reports.length; i++) {
-                reports[i]._configId = configId;
-                reports[i]._fromFile = true;
-            }
-            return reports;
-        }
-
-        // If no explicit data, find all unreconciled settlements
-        logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-            'Settlement MR getInputData: No data file parameter found. Searching for unreconciled settlement records (PENDING/PROCESSING status)');
+            'Settlement Process MR getInputData: Searching for PENDING settlements');
 
         return {
-            type: constants.CUSTOM_RECORDS.SETTLEMENT.ID,
-            filters: [
-                [constants.CUSTOM_RECORDS.SETTLEMENT.FIELDS.STATUS, 'anyof',
-                    [constants.SETTLEMENT_STATUS.PENDING, constants.SETTLEMENT_STATUS.PROCESSING]]
-            ],
+            type: STL.ID,
+            filters: [[STL.FIELDS.STATUS, 'anyof', constants.SETTLEMENT_STATUS.PENDING]],
             columns: [
-                constants.CUSTOM_RECORDS.SETTLEMENT.FIELDS.REPORT_ID,
-                constants.CUSTOM_RECORDS.SETTLEMENT.FIELDS.TOTAL_AMOUNT,
-                constants.CUSTOM_RECORDS.SETTLEMENT.FIELDS.PRODUCT_CHARGES,
-                constants.CUSTOM_RECORDS.SETTLEMENT.FIELDS.SHIPPING_CREDITS,
-                constants.CUSTOM_RECORDS.SETTLEMENT.FIELDS.PROMO_REBATES,
-                constants.CUSTOM_RECORDS.SETTLEMENT.FIELDS.SELLING_FEES,
-                constants.CUSTOM_RECORDS.SETTLEMENT.FIELDS.FBA_FEES,
-                constants.CUSTOM_RECORDS.SETTLEMENT.FIELDS.OTHER_FEES,
-                constants.CUSTOM_RECORDS.SETTLEMENT.FIELDS.REFUNDS,
-                constants.CUSTOM_RECORDS.SETTLEMENT.FIELDS.CONFIG,
-                constants.CUSTOM_RECORDS.SETTLEMENT.FIELDS.START_DATE,
-                constants.CUSTOM_RECORDS.SETTLEMENT.FIELDS.END_DATE
+                STL.FIELDS.REPORT_ID,
+                STL.FIELDS.CONFIG,
+                STL.FIELDS.CURRENCY,
+                STL.FIELDS.EXPECTED_TOTAL,
+                STL.FIELDS.TOTAL_PAYMENTS,
+                STL.FIELDS.TOTAL_REFUNDS,
+                STL.FIELDS.TOTAL_OTHER,
+                STL.FIELDS.TOTAL_AMOUNT,
+                STL.FIELDS.NO_JE,
+                STL.FIELDS.DEPOSIT_DATE
             ]
         };
     }
 
     /**
-     * Map stage: Pass each settlement to reduce keyed by config ID.
+     * Map stage: emit each settlement keyed by its internal ID.
      */
     function map(context) {
         try {
-            const STL = constants.CUSTOM_RECORDS.SETTLEMENT.FIELDS;
-            const result = JSON.parse(context.value);
+            var result = JSON.parse(context.value);
+            var settlementId = result.id;
+            var configId = result.values ? result.values[STL.FIELDS.CONFIG] : null;
+            if (configId && typeof configId === 'object') configId = configId.value || configId;
 
             logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                'Settlement MR map: Processing entry' +
-                (result._fromFile ? ' (from file)' : ' (from search)') +
-                ' - Report ID: ' + (result.reportId || result.values?.[STL.REPORT_ID] || 'unknown'));
+                'Settlement Process MR map: Processing settlement ' + settlementId);
 
-            // File-based data: report metadata from scheduled script
-            // Download the report, parse it, create settlement record, then emit
-            if (result._fromFile) {
-                var configId = result._configId;
-                if (!configId) {
-                    logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                        'Settlement MR map: Report ' + (result.reportId || 'unknown') + ' has no config assigned, skipping. ' +
-                        'This means the data file did not contain a configId.');
-                    return;
-                }
-
-                logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                    'Settlement MR map: Loading config ' + configId + ' for report ' + result.reportId);
-
-                var config = configHelper.getConfig(configId);
-
-                logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                    'Settlement MR map: Downloading settlement report from Amazon (reportDocumentId: ' + result.reportDocumentId + ')');
-
-                var parsed = settlementService.downloadSettlementReport(config, result.reportDocumentId);
-
-                logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                    'Settlement MR map: Report downloaded and parsed. Summary - totalAmount: ' + (parsed.summary.totalAmount || 0) +
-                    ', productCharges: ' + (parsed.summary.productCharges || 0) +
-                    ', sellingFees: ' + (parsed.summary.sellingFees || 0) +
-                    ', fbaFees: ' + (parsed.summary.fbaFees || 0) +
-                    ', rows parsed: ' + (parsed.rows ? parsed.rows.length : 0));
-
-                // Reuse existing settlement record if one exists from a prior failed run
-                logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                    'Settlement MR map: Checking if settlement record already exists for report ' + result.reportId);
-
-                var existingId = settlementService.findExistingSettlement(result.reportId);
-                var settlementId;
-                if (existingId) {
-                    settlementId = existingId;
-                    logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                        'Settlement MR map: Reusing existing settlement record (ID: ' + existingId + ') from a prior run for report ' + result.reportId);
-                } else {
-                    settlementId = settlementService.createSettlementRecord(config, result, parsed.summary);
-                    logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                        'Settlement MR map: Created new settlement record (ID: ' + settlementId + ') for report ' + result.reportId);
-                }
-
-                // Store raw settlement report data in File Cabinet for audit/reference
-                if (parsed.rawData) {
-                    try {
-                        settlementService.storeSettlementFile(result.reportId, parsed.rawData, settlementId);
-                    } catch (fileErr) {
-                        logger.warn(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                            'Settlement MR map: Could not store settlement file for report ' + result.reportId + ': ' + fileErr.message);
-                    }
-                }
-
-                // Strip raw rows from rowsByMonth — only columnAmounts and date
-                // are needed by reduce, and rows can push values over NetSuite's 10MB limit
-                var compactRowsByMonth = null;
-                if (parsed.rowsByMonth) {
-                    compactRowsByMonth = {};
-                    for (var mk in parsed.rowsByMonth) {
-                        if (!parsed.rowsByMonth.hasOwnProperty(mk)) continue;
-                        compactRowsByMonth[mk] = {
-                            date: parsed.rowsByMonth[mk].date,
-                            columnAmounts: parsed.rowsByMonth[mk].columnAmounts
-                        };
-                    }
-                }
-
-                var settlementData = {
-                    settlementId: settlementId,
-                    reportId: result.reportId,
-                    totalAmount: parsed.summary.totalAmount || 0,
-                    productCharges: parsed.summary.productCharges || 0,
-                    shippingCredits: parsed.summary.shippingCredits || 0,
-                    promoRebates: parsed.summary.promoRebates || 0,
-                    sellingFees: parsed.summary.sellingFees || 0,
-                    fbaFees: parsed.summary.fbaFees || 0,
-                    otherFees: parsed.summary.otherFees || 0,
-                    refunds: parsed.summary.refunds || 0,
-                    endDate: result.dataEndTime || null,
-                    columnAmounts: parsed.columnAmounts || null,
-                    rowsByMonth: compactRowsByMonth
-                };
-
-                logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                    'Settlement MR map: Emitting settlement data to reduce stage. Key (configId): ' + configId +
-                    ', settlementId: ' + settlementId + ', reportId: ' + result.reportId);
-
-                context.write({
-                    key: configId,
-                    value: JSON.stringify(settlementData)
-                });
-                return;
-            }
-
-            // Search-based data: existing settlement records with NetSuite field IDs
-            const values = result.values || result;
-
-            var configValue = values[STL.CONFIG] ? values[STL.CONFIG].value || values[STL.CONFIG] : null;
-            if (!configValue) {
-                logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                    'Settlement MR map: Settlement ' + (values[STL.REPORT_ID] || result.id) +
-                    ' has no config assigned, skipping. The settlement record is missing the config field reference.', {
-                    details: 'Settlement ID: ' + result.id
-                });
-                return;
-            }
-
-            logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                'Settlement MR map: Emitting search-based settlement (ID: ' + result.id +
-                ', reportId: ' + values[STL.REPORT_ID] + ') to reduce stage. Key (configId): ' + configValue);
-
-            var searchSettlementData = {
-                settlementId: result.id,
-                reportId: values[STL.REPORT_ID],
-                totalAmount: parseFloat(values[STL.TOTAL_AMOUNT]) || 0,
-                productCharges: parseFloat(values[STL.PRODUCT_CHARGES]) || 0,
-                shippingCredits: parseFloat(values[STL.SHIPPING_CREDITS]) || 0,
-                promoRebates: parseFloat(values[STL.PROMO_REBATES]) || 0,
-                sellingFees: parseFloat(values[STL.SELLING_FEES]) || 0,
-                fbaFees: parseFloat(values[STL.FBA_FEES]) || 0,
-                otherFees: parseFloat(values[STL.OTHER_FEES]) || 0,
-                refunds: parseFloat(values[STL.REFUNDS]) || 0,
-                endDate: values[STL.END_DATE]
-            };
-
-            // Include parsed column amounts and month groupings if available
-            if (values.columnAmounts) searchSettlementData.columnAmounts = values.columnAmounts;
-            if (values.rowsByMonth) searchSettlementData.rowsByMonth = values.rowsByMonth;
+            // Mark as PROCESSING
+            record.submitFields({
+                type: STL.ID,
+                id: settlementId,
+                values: { [STL.FIELDS.STATUS]: constants.SETTLEMENT_STATUS.PROCESSING }
+            });
 
             context.write({
-                key: configValue,
-                value: JSON.stringify(searchSettlementData)
+                key: settlementId,
+                value: JSON.stringify({
+                    settlementId: settlementId,
+                    configId: configId,
+                    reportId: result.values ? result.values[STL.FIELDS.REPORT_ID] : '',
+                    currency: result.values ? result.values[STL.FIELDS.CURRENCY] : '',
+                    expectedTotal: result.values ? parseFloat(result.values[STL.FIELDS.EXPECTED_TOTAL]) || 0 : 0,
+                    totalPayments: result.values ? parseFloat(result.values[STL.FIELDS.TOTAL_PAYMENTS]) || 0 : 0,
+                    totalRefunds: result.values ? parseFloat(result.values[STL.FIELDS.TOTAL_REFUNDS]) || 0 : 0,
+                    totalOther: result.values ? parseFloat(result.values[STL.FIELDS.TOTAL_OTHER]) || 0 : 0,
+                    totalAmount: result.values ? parseFloat(result.values[STL.FIELDS.TOTAL_AMOUNT]) || 0 : 0,
+                    noJe: result.values ? result.values[STL.FIELDS.NO_JE] : false,
+                    depositDate: result.values ? result.values[STL.FIELDS.DEPOSIT_DATE] : ''
+                })
             });
         } catch (e) {
             logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                'Settlement map error: ' + e.message, { details: e.stack });
+                'Settlement Process MR map error: ' + e.message, { details: e.stack });
         }
     }
 
     /**
-     * Reduce stage: Create Deposits/Invoices and Journal Entries per config.
-     * Supports configurable settlement transaction type (DEPOSIT or INVOICE)
-     * and JE grouping (PER_SETTLEMENT or BY_MONTH).
+     * Reduce stage: orchestrates the old settlement processing flow for each settlement.
      */
     function reduce(context) {
-        const configId = context.key;
-
-        logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
-            'Settlement MR reduce: Starting reduce for config ' + configId +
-            '. Number of settlements to process: ' + context.values.length);
+        var settlementId = context.key;
+        var data = JSON.parse(context.values[0]);
+        var configId = data.configId;
+        var reportId = data.reportId;
 
         try {
-            const config = configHelper.getConfig(configId);
-
-            // Determine settlement processing mode from config
-            const settleTranType = config.settleTranType || constants.SETTLEMENT_TRAN_TYPE.DEPOSIT;
-            const jeGrouping = config.jeGrouping || constants.JE_GROUPING.PER_SETTLEMENT;
-            const useChargeMap = config.useChargeMap === true || config.useChargeMap === 'T';
-
             logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
-                'Settlement MR reduce: Config ' + configId + ' settings - ' +
-                'tranType: ' + (settleTranType === constants.SETTLEMENT_TRAN_TYPE.INVOICE ? 'INVOICE' : 'DEPOSIT') +
-                ', jeGrouping: ' + (jeGrouping === constants.JE_GROUPING.BY_MONTH ? 'BY_MONTH' : 'PER_SETTLEMENT') +
-                ', useChargeMap: ' + useChargeMap +
-                ', autoDeposit: ' + (config.autoDeposit || false) +
-                ', settleAccount: ' + (config.settleAccount || 'NOT SET') +
-                ', feeAccount: ' + (config.feeAccount || 'NOT SET') +
-                ', customer: ' + (config.customer || 'NOT SET'));
+                'Settlement Process MR reduce: Starting for settlement ' + settlementId +
+                ', report ' + reportId + ', config ' + configId);
 
-            // Load charge account map if enabled (used for JE lines in DEPOSIT mode)
-            let chargeAccountMap = null;
-            if (useChargeMap) {
-                chargeAccountMap = configHelper.getChargeAccountMap(configId);
-                logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
-                    'Settlement MR reduce: Loaded charge account map with ' +
-                    (chargeAccountMap && chargeAccountMap.map ? Object.keys(chargeAccountMap.map).length : 0) +
-                    ' mapping(s), defaultAccount: ' + (chargeAccountMap && chargeAccountMap.defaultAccount ? chargeAccountMap.defaultAccount : 'NONE'));
+            var config = configHelper.getConfig(configId);
+            var chargeMap = configHelper.getChargeAccountMap(configId, resolveCurrencyId(data.currency));
+
+            // ================================================================
+            // Phase A: Create/Link Order Headers
+            // ================================================================
+            var headers = phaseA_createOrderHeaders(config, settlementId);
+
+            // ================================================================
+            // Phase B: Create Invoices + Payments
+            // ================================================================
+            phaseB_createInvoicesAndPayments(config, settlementId, reportId, headers, chargeMap);
+
+            // ================================================================
+            // Phase C: Create Credit Memos + Refunds
+            // ================================================================
+            phaseC_createCreditMemosAndRefunds(config, settlementId, reportId, headers, chargeMap);
+
+            // ================================================================
+            // Phase D: Create JEs for Other Charges
+            // ================================================================
+            var journalIds = [];
+            var noJe = data.noJe === true || data.noJe === 'T';
+            if (!noJe && data.totalOther !== 0) {
+                journalIds = phaseD_createChargeJournalEntries(
+                    config, settlementId, reportId, data.currency, data.expectedTotal, data.totalAmount, chargeMap
+                );
             }
 
-            // Load column-item map for INVOICE mode (maps fee descriptions → Other Charge items)
-            let columnItemMap = null;
-            if (settleTranType === constants.SETTLEMENT_TRAN_TYPE.INVOICE) {
-                columnItemMap = configHelper.getColumnItemMap(configId, { useInSettle: true });
-                logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
-                    'Settlement MR reduce: Loaded column-item map with ' +
-                    (columnItemMap ? Object.keys(columnItemMap).length : 0) + ' mapping(s) for invoice fee lines');
-            }
+            // ================================================================
+            // Mark RECONCILED
+            // ================================================================
+            financialService.updateSettlementFinancials(settlementId, {
+                journalIds: journalIds
+            });
 
-            for (const val of context.values) {
-                const settlement = JSON.parse(val);
+            logger.success(constants.LOG_TYPE.FINANCIAL_RECON,
+                'Settlement ' + reportId + ' reconciled. ' +
+                'Headers: ' + Object.keys(headers).length +
+                (journalIds.length ? ', JEs: ' + journalIds.join(',') : ''), {
+                configId: configId,
+                amazonRef: reportId
+            });
 
-                logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
-                    'Settlement MR reduce: Processing settlement reportId: ' + settlement.reportId +
-                    ', settlementId: ' + settlement.settlementId +
-                    ', totalAmount: ' + settlement.totalAmount);
-
-                let summary = null;
-                try {
-                    summary = {
-                        totalAmount: settlement.totalAmount,
-                        productCharges: settlement.productCharges,
-                        shippingCredits: settlement.shippingCredits,
-                        promoRebates: settlement.promoRebates,
-                        sellingFees: settlement.sellingFees,
-                        fbaFees: settlement.fbaFees,
-                        otherFees: settlement.otherFees,
-                        refunds: settlement.refunds
-                    };
-
-                    let depositId = null;
-                    let invoiceId = null;
-                    let paymentId = null;
-                    let journalId = null;
-                    let journalIds = [];
-
-                    // Create payment transaction based on configured type
-                    if (settleTranType === constants.SETTLEMENT_TRAN_TYPE.INVOICE) {
-                        // Invoice mode: fees go directly on the invoice as Other Charge items
-                        // (like old NES_ARES_sch_amazon_invoices.js updateInvoices)
-                        if (config.customer) {
-                            logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
-                                'Settlement MR reduce: Creating INVOICE with fee lines for settlement ' + settlement.reportId +
-                                '. Customer: ' + config.customer + ', totalAmount: ' + summary.totalAmount +
-                                ', columnAmounts: ' + (settlement.columnAmounts ? Object.keys(settlement.columnAmounts).length + ' entries' : 'NONE'));
-
-                            var invoiceResult = financialService.createInvoice(
-                                config, settlement, summary, settlement.columnAmounts, columnItemMap
-                            );
-                            invoiceId = invoiceResult.invoiceId;
-
-                            logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
-                                'Settlement MR reduce: Invoice created (ID: ' + invoiceId + ') for settlement ' + settlement.reportId +
-                                (invoiceResult.unmappedFees && Object.keys(invoiceResult.unmappedFees).length > 0
-                                    ? '. Unmapped fees: ' + Object.keys(invoiceResult.unmappedFees).join(', ')
-                                    : '. All fees mapped to invoice lines'));
-
-                            // Create Customer Payment against the invoice
-                            if (invoiceId && summary.totalAmount) {
-                                try {
-                                    paymentId = financialService.createSettlementPayment(config, invoiceId, settlement);
-                                    logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
-                                        'Settlement MR reduce: Customer Payment created (ID: ' + paymentId + ') for settlement ' + settlement.reportId);
-                                } catch (payErr) {
-                                    logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
-                                        'Settlement MR reduce: Customer Payment creation failed for settlement ' + settlement.reportId +
-                                        ': ' + payErr.message + '. Invoice ' + invoiceId + ' was created but remains open.');
-                                }
-                            }
-
-                            // Create JE only for unmapped fees (charges without a column-item mapping)
-                            var unmappedFees = invoiceResult.unmappedFees || {};
-                            if (Object.keys(unmappedFees).length > 0 && useChargeMap) {
-                                logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
-                                    'Settlement MR reduce: Creating JE for ' + Object.keys(unmappedFees).length +
-                                    ' unmapped fee(s) for settlement ' + settlement.reportId);
-                                var unmappedSummary = { sellingFees: 0, fbaFees: 0, otherFees: 0, promoRebates: 0 };
-                                for (var uf in unmappedFees) {
-                                    if (unmappedFees.hasOwnProperty(uf)) unmappedSummary.otherFees += unmappedFees[uf];
-                                }
-                                journalId = financialService.createFeeJournalEntry(
-                                    config, settlement, unmappedSummary, unmappedFees, chargeAccountMap
-                                );
-                            }
-                        } else {
-                            logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
-                                'Settlement MR reduce: Skipping invoice creation for settlement ' + settlement.reportId +
-                                '. Reason: customer not configured on config', {
-                                configId: configId,
-                                amazonRef: settlement.reportId
-                            });
-                        }
-                    } else {
-                        // Deposit mode (default, existing behavior)
-                        if (config.autoDeposit && config.settleAccount && summary.totalAmount) {
-                            logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
-                                'Settlement MR reduce: Creating DEPOSIT for settlement ' + settlement.reportId +
-                                '. settleAccount: ' + config.settleAccount + ', totalAmount: ' + summary.totalAmount);
-                            depositId = financialService.createDeposit(config, settlement, summary);
-                            logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
-                                'Settlement MR reduce: Deposit created (ID: ' + depositId + ') for settlement ' + settlement.reportId);
-                        } else {
-                            logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
-                                'Settlement MR reduce: Skipping deposit creation for settlement ' + settlement.reportId +
-                                '. Reason: ' +
-                                (!config.autoDeposit ? 'autoDeposit is disabled' : '') +
-                                (!config.settleAccount ? ((!config.autoDeposit ? ', ' : '') + 'settleAccount not configured') : '') +
-                                (!summary.totalAmount ? (((!config.autoDeposit || !config.settleAccount) ? ', ' : '') + 'totalAmount is 0 or empty') : ''), {
-                                configId: configId,
-                                amazonRef: settlement.reportId
-                            });
-                        }
-
-                        // Create Fee Journal Entries (DEPOSIT mode only — in INVOICE mode fees are on the invoice)
-                        var hasFees = summary.sellingFees || summary.fbaFees || summary.otherFees || summary.promoRebates;
-                        var hasAccount = config.feeAccount || (chargeAccountMap && Object.keys(chargeAccountMap.map).length > 0);
-
-                        logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
-                            'Settlement MR reduce: Fee JE check for settlement ' + settlement.reportId +
-                            ' - sellingFees: ' + (summary.sellingFees || 0) +
-                            ', fbaFees: ' + (summary.fbaFees || 0) +
-                            ', otherFees: ' + (summary.otherFees || 0) +
-                            ', promoRebates: ' + (summary.promoRebates || 0) +
-                            ', hasFees: ' + !!hasFees +
-                            ', hasAccount: ' + !!hasAccount);
-
-                        if (hasFees && hasAccount) {
-                            if (jeGrouping === constants.JE_GROUPING.BY_MONTH && settlement.rowsByMonth) {
-                                var monthKeys = Object.keys(settlement.rowsByMonth);
-                                logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
-                                    'Settlement MR reduce: Creating BY_MONTH fee JEs for settlement ' + settlement.reportId +
-                                    '. Months found: ' + monthKeys.join(', '));
-                                journalIds = financialService.createFeeJournalEntriesByMonth(
-                                    config, settlement, settlement.rowsByMonth, chargeAccountMap
-                                );
-                                logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
-                                    'Settlement MR reduce: Created ' + journalIds.length + ' monthly JE(s) for settlement ' + settlement.reportId +
-                                    '. JE IDs: ' + journalIds.join(', '));
-                            } else {
-                                logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
-                                    'Settlement MR reduce: Creating single fee JE (PER_SETTLEMENT) for settlement ' + settlement.reportId +
-                                    (settlement.columnAmounts ? '. Column amounts available for granular lines' : '. Using summary-based fee lines'));
-                                journalId = financialService.createFeeJournalEntry(
-                                    config, settlement, summary, settlement.columnAmounts, chargeAccountMap
-                                );
-                                logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
-                                    'Settlement MR reduce: Fee JE ' + (journalId ? 'created (ID: ' + journalId + ')' : 'was NOT created (no fee lines)') +
-                                    ' for settlement ' + settlement.reportId);
-                            }
-                        } else {
-                            logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
-                                'Settlement MR reduce: Skipping fee JE creation for settlement ' + settlement.reportId +
-                                '. Reason: ' + (!hasFees ? 'no fees found in settlement' : 'no fee account configured'), {
-                                configId: configId,
-                                amazonRef: settlement.reportId
-                            });
-                        }
-                    }
-
-                    logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
-                        'Settlement MR reduce: Updating settlement record ' + settlement.settlementId + ' to RECONCILED status. ' +
-                        'depositId: ' + (depositId || 'none') +
-                        ', invoiceId: ' + (invoiceId || 'none') +
-                        ', paymentId: ' + (paymentId || 'none') +
-                        ', journalId: ' + (journalId || 'none') +
-                        ', journalIds: ' + (journalIds.length ? journalIds.join(',') : 'none'));
-
-                    // Update settlement record with all financial references
-                    financialService.updateSettlementFinancials(settlement.settlementId, {
-                        depositId: depositId,
-                        invoiceId: invoiceId,
-                        journalId: journalId,
-                        journalIds: journalIds
-                    });
-
-                    logger.success(constants.LOG_TYPE.FINANCIAL_RECON,
-                        'Settlement ' + settlement.reportId + ' reconciled' +
-                        (settleTranType === constants.SETTLEMENT_TRAN_TYPE.INVOICE
-                            ? ' (Invoice' + (paymentId ? ' + Payment' : '') + ')'
-                            : ' (Deposit)') +
-                        (journalId || journalIds.length ? ' + JE' : ''), {
-                        configId: configId,
-                        amazonRef: settlement.reportId
-                    });
-
-                } catch (e) {
-                    logger.error(constants.LOG_TYPE.FINANCIAL_RECON,
-                        'Settlement reconciliation error for ' + settlement.reportId + ': ' + e.message, {
-                        configId: configId,
-                        amazonRef: settlement.reportId,
-                        details: e.stack
-                    });
-
-                    // Queue for retry
-                    errorQueue.enqueue({
-                        type: constants.ERROR_QUEUE_TYPE.SETTLEMENT_PROCESS,
-                        amazonRef: settlement.reportId,
-                        errorMsg: e.message,
-                        configId: configId,
-                        payload: JSON.stringify({ settlement, summary })
-                    });
-                }
-            }
         } catch (e) {
             logger.error(constants.LOG_TYPE.FINANCIAL_RECON,
-                'Reduce error for config ' + configId + ': ' + e.message, {
-                configId: configId,
+                'Settlement Process MR reduce error for ' + settlementId + ': ' + e.message, {
                 details: e.stack
+            });
+
+            try {
+                record.submitFields({
+                    type: STL.ID,
+                    id: settlementId,
+                    values: { [STL.FIELDS.STATUS]: constants.SETTLEMENT_STATUS.ERROR }
+                });
+            } catch (ignore) { /* best effort */ }
+
+            errorQueue.enqueue({
+                type: constants.ERROR_QUEUE_TYPE.SETTLEMENT_PROCESS,
+                amazonRef: reportId,
+                errorMsg: e.message,
+                configId: configId,
+                payload: JSON.stringify({ settlementId: settlementId })
             });
         }
     }
 
-    function summarize(summary) {
-        logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-            'Settlement MR summarize: Map/Reduce execution completed. Reviewing results...');
+    // ========================================================================
+    // Phase A: Create/Link Order Headers
+    // ========================================================================
 
-        // Log input stage errors
-        if (summary.inputSummary.error) {
-            logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                'Settlement MR summarize: Input stage error: ' + summary.inputSummary.error);
-        } else {
-            logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                'Settlement MR summarize: Input stage completed successfully (no errors)');
+    /**
+     * Groups settlement lines by order_id, creates/finds a settle_header per order.
+     * @returns {Object} Map of orderId → { headerId, marketplace, hasOrders, hasRefunds }
+     */
+    function phaseA_createOrderHeaders(config, settlementId) {
+        var headers = {};
+
+        // Search all unprocessed lines for this settlement
+        var lineSearch = search.create({
+            type: SL.ID,
+            filters: [
+                [SL.FIELDS.SUMMARY, 'anyof', settlementId],
+                'AND',
+                [SL.FIELDS.PROCESSED, 'is', 'F']
+            ],
+            columns: [
+                SL.FIELDS.ORDER_ID,
+                SL.FIELDS.MARKETPLACE,
+                SL.FIELDS.TRAN_TYPE
+            ]
+        });
+
+        lineSearch.run().each(function (result) {
+            var orderId = result.getValue(SL.FIELDS.ORDER_ID) || '';
+            if (!orderId) return true;
+
+            var marketplace = result.getValue(SL.FIELDS.MARKETPLACE) || '';
+            var tranType = result.getValue(SL.FIELDS.TRAN_TYPE) || '';
+
+            if (!headers[orderId]) {
+                headers[orderId] = {
+                    headerId: null,
+                    marketplace: marketplace,
+                    hasOrders: false,
+                    hasRefunds: false
+                };
+            }
+            if (tranType === 'Order') headers[orderId].hasOrders = true;
+            if (tranType === 'Refund') headers[orderId].hasRefunds = true;
+
+            return true;
+        });
+
+        // Create or find header record for each order
+        for (var orderId in headers) {
+            if (!headers.hasOwnProperty(orderId)) continue;
+            var info = headers[orderId];
+
+            try {
+                // Search for existing header
+                var existing = search.create({
+                    type: SH.ID,
+                    filters: [
+                        [SH.FIELDS.ORDER_ID, 'is', orderId],
+                        'AND',
+                        [SH.FIELDS.SUMMARY, 'anyof', settlementId]
+                    ],
+                    columns: ['internalid']
+                }).run().getRange({ start: 0, end: 1 });
+
+                if (existing && existing.length > 0) {
+                    info.headerId = existing[0].id;
+                } else {
+                    var rec = record.create({ type: SH.ID });
+                    rec.setValue({ fieldId: SH.FIELDS.ORDER_ID, value: orderId });
+                    rec.setValue({ fieldId: SH.FIELDS.MARKETPLACE, value: info.marketplace });
+                    rec.setValue({ fieldId: SH.FIELDS.CONFIG, value: config.configId });
+                    rec.setValue({ fieldId: SH.FIELDS.SUMMARY, value: settlementId });
+                    info.headerId = rec.save({ ignoreMandatoryFields: true });
+                }
+
+                // Set flags
+                var flagUpdates = {};
+                if (info.hasOrders) flagUpdates[SH.FIELDS.UPDATE_INV] = true;
+                if (info.hasRefunds) flagUpdates[SH.FIELDS.REFUND_REQUIRED] = true;
+                if (Object.keys(flagUpdates).length > 0) {
+                    record.submitFields({ type: SH.ID, id: info.headerId, values: flagUpdates });
+                }
+            } catch (e) {
+                logger.error(constants.LOG_TYPE.FINANCIAL_RECON,
+                    'Phase A: Error creating header for order ' + orderId + ': ' + e.message);
+            }
         }
 
-        // Log map stage errors
-        var mapErrorCount = 0;
-        summary.mapSummary.errors.iterator().each(function (key, error) {
-            mapErrorCount++;
-            logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                'Settlement MR summarize: Map error for key ' + key + ': ' + error);
-            return true;
-        });
-        logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-            'Settlement MR summarize: Map stage completed with ' + mapErrorCount + ' error(s)');
+        logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+            'Phase A complete: Created/linked ' + Object.keys(headers).length + ' order headers');
 
-        // Log reduce stage errors
-        var reduceErrorCount = 0;
-        summary.reduceSummary.errors.iterator().each(function (key, error) {
-            reduceErrorCount++;
-            logger.error(constants.LOG_TYPE.FINANCIAL_RECON,
-                'Settlement MR summarize: Reduce error for config ' + key + ': ' + error);
+        return headers;
+    }
+
+    // ========================================================================
+    // Phase B: Create Invoices + Payments
+    // ========================================================================
+
+    function phaseB_createInvoicesAndPayments(config, settlementId, reportId, headers, chargeMap) {
+        // Search headers where update_inv = T for this settlement
+        var headerSearch = search.create({
+            type: SH.ID,
+            filters: [
+                [SH.FIELDS.SUMMARY, 'anyof', settlementId],
+                'AND',
+                [SH.FIELDS.UPDATE_INV, 'is', 'T']
+            ],
+            columns: [SH.FIELDS.ORDER_ID, SH.FIELDS.MARKETPLACE, SH.FIELDS.INVOICE_REC]
+        });
+
+        headerSearch.run().each(function (result) {
+            var headerId = result.id;
+            var orderId = result.getValue(SH.FIELDS.ORDER_ID);
+            var marketplace = result.getValue(SH.FIELDS.MARKETPLACE) || '';
+
+            try {
+                // Skip Non-Amazon marketplace
+                if (marketplace === 'Non-Amazon') {
+                    record.submitFields({
+                        type: SH.ID, id: headerId,
+                        values: { [SH.FIELDS.UPDATE_INV]: false }
+                    });
+                    return true;
+                }
+
+                // Get settlement lines for this order
+                var orderLines = getSettlementLines(settlementId, orderId, 'Order');
+                if (!orderLines || orderLines.length === 0) {
+                    record.submitFields({
+                        type: SH.ID, id: headerId,
+                        values: { [SH.FIELDS.UPDATE_INV]: false }
+                    });
+                    return true;
+                }
+
+                // Check for existing invoice
+                var existingInvId = null;
+                try {
+                    var invLookup = search.lookupFields({
+                        type: SH.ID, id: headerId,
+                        columns: [SH.FIELDS.INVOICE_REC]
+                    });
+                    var invVal = invLookup[SH.FIELDS.INVOICE_REC];
+                    if (Array.isArray(invVal) && invVal.length > 0) existingInvId = invVal[0].value;
+                    else if (invVal) existingInvId = invVal;
+                } catch (ignore) { }
+
+                if (!existingInvId) {
+                    existingInvId = financialService.lookupInvoice(orderId);
+                }
+
+                var invoiceId, paymentTotal;
+                if (existingInvId) {
+                    invoiceId = existingInvId;
+                    paymentTotal = 0;
+                    for (var i = 0; i < orderLines.length; i++) {
+                        paymentTotal += parseFloat(orderLines[i].amount) || 0;
+                    }
+                } else {
+                    var result2 = financialService.createSettlementInvoice(
+                        config, orderId, orderLines, marketplace, chargeMap
+                    );
+                    invoiceId = result2.invoiceId;
+                    paymentTotal = result2.paymentTotal;
+                }
+
+                // Create customer payment
+                var paymentId = null;
+                if (invoiceId && paymentTotal) {
+                    var firstLine = orderLines[0] || {};
+                    var settlement = {
+                        reportId: reportId,
+                        totalAmount: paymentTotal,
+                        endDate: firstLine.postDateNs || new Date()
+                    };
+                    paymentId = financialService.createSettlementPayment(
+                        config, invoiceId, settlement, firstLine.postDateNs
+                    );
+                }
+
+                // Mark order lines as processed
+                markLinesProcessed(orderLines);
+
+                // Update header
+                var headerUpdates = {
+                    [SH.FIELDS.UPDATE_INV]: false,
+                    [SH.FIELDS.DATA_LOADED]: false,
+                    [SH.FIELDS.ERROR]: ''
+                };
+                if (invoiceId) headerUpdates[SH.FIELDS.INVOICE_REC] = invoiceId;
+                if (paymentId) headerUpdates[SH.FIELDS.PAYMENT_REC] = String(paymentId);
+                if (config.customer) headerUpdates[SH.FIELDS.CUSTOMER] = config.customer;
+                record.submitFields({ type: SH.ID, id: headerId, values: headerUpdates });
+
+                logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                    'Phase B: Invoice ' + invoiceId + ', Payment ' + (paymentId || 'none') +
+                    ' for order ' + orderId);
+
+            } catch (e) {
+                logger.error(constants.LOG_TYPE.FINANCIAL_RECON,
+                    'Phase B: Error for order ' + orderId + ': ' + e.message);
+                try {
+                    record.submitFields({
+                        type: SH.ID, id: headerId,
+                        values: { [SH.FIELDS.ERROR]: e.message }
+                    });
+                } catch (ignore) { }
+            }
+
             return true;
         });
+    }
+
+    // ========================================================================
+    // Phase C: Create Credit Memos + Refunds
+    // ========================================================================
+
+    function phaseC_createCreditMemosAndRefunds(config, settlementId, reportId, headers, chargeMap) {
+        var headerSearch = search.create({
+            type: SH.ID,
+            filters: [
+                [SH.FIELDS.SUMMARY, 'anyof', settlementId],
+                'AND',
+                [SH.FIELDS.REFUND_REQUIRED, 'is', 'T']
+            ],
+            columns: [SH.FIELDS.ORDER_ID, SH.FIELDS.MARKETPLACE]
+        });
+
+        headerSearch.run().each(function (result) {
+            var headerId = result.id;
+            var orderId = result.getValue(SH.FIELDS.ORDER_ID);
+            var marketplace = result.getValue(SH.FIELDS.MARKETPLACE) || '';
+
+            try {
+                var refundLines = getSettlementLines(settlementId, orderId, 'Refund');
+                if (!refundLines || refundLines.length === 0) {
+                    record.submitFields({
+                        type: SH.ID, id: headerId,
+                        values: { [SH.FIELDS.REFUND_REQUIRED]: false, [SH.FIELDS.ERROR]: '' }
+                    });
+                    return true;
+                }
+
+                // Create credit memo
+                var creditMemoId = financialService.createSettlementCreditMemo(
+                    config, orderId, refundLines, marketplace, chargeMap
+                );
+
+                // Create customer refund
+                var refundId = null;
+                if (creditMemoId) {
+                    var settlId = refundLines[0] ? refundLines[0].settlementId : reportId;
+                    refundId = financialService.createSettlementRefund(config, creditMemoId, settlId);
+                }
+
+                // Mark refund lines as processed
+                markLinesProcessed(refundLines);
+
+                // Update header
+                var headerUpdates = {
+                    [SH.FIELDS.REFUND_REQUIRED]: false,
+                    [SH.FIELDS.ERROR]: ''
+                };
+                if (creditMemoId) headerUpdates[SH.FIELDS.CREDIT_MEMO] = creditMemoId;
+                if (refundId) headerUpdates[SH.FIELDS.REFUND] = refundId;
+                record.submitFields({ type: SH.ID, id: headerId, values: headerUpdates });
+
+                logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                    'Phase C: CM ' + creditMemoId + ', Refund ' + (refundId || 'none') +
+                    ' for order ' + orderId);
+
+            } catch (e) {
+                logger.error(constants.LOG_TYPE.FINANCIAL_RECON,
+                    'Phase C: Error for order ' + orderId + ': ' + e.message);
+                try {
+                    record.submitFields({
+                        type: SH.ID, id: headerId,
+                        values: { [SH.FIELDS.ERROR]: e.message }
+                    });
+                } catch (ignore) { }
+            }
+
+            return true;
+        });
+    }
+
+    // ========================================================================
+    // Phase D: Create JEs for Other Charges (grouped by month)
+    // ========================================================================
+
+    /**
+     * Replicates NES_ARES_sch_settlement_charges.js logic:
+     * Creates one JE per posting month for non-Order/Refund charges.
+     */
+    function phaseD_createChargeJournalEntries(config, settlementId, reportId, currency, expectedTotal, totalAmount, chargeMap) {
+        var jeIds = [];
+
+        // Check trigger conditions (like old process)
+        if (expectedTotal && totalAmount && parseFloat(expectedTotal) !== parseFloat(totalAmount)) {
+            logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
+                'Phase D: Expected total (' + expectedTotal + ') != actual total (' + totalAmount +
+                ') for settlement ' + reportId + '. Skipping JE creation.');
+            return jeIds;
+        }
+
+        // Check if JEs already exist
+        var existingJournals = search.lookupFields({
+            type: STL.ID, id: settlementId,
+            columns: [STL.FIELDS.NS_JOURNALS]
+        });
+        var nsJournals = existingJournals[STL.FIELDS.NS_JOURNALS] || '';
+        if (nsJournals && String(nsJournals).trim() !== '') {
+            logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                'Phase D: JEs already exist for settlement ' + reportId + ': ' + nsJournals);
+            return jeIds;
+        }
+
+        // Search charge lines grouped by marketplace, desc, month
+        var chargeSearch = search.create({
+            type: SL.ID,
+            filters: [
+                [SL.FIELDS.SUMMARY, 'anyof', settlementId],
+                'AND',
+                [
+                    [[SL.FIELDS.TRAN_TYPE, 'isnot', 'Order'], 'AND', [SL.FIELDS.TRAN_TYPE, 'isnot', 'Refund']],
+                    'OR',
+                    [SL.FIELDS.MARKETPLACE, 'is', 'Non-Amazon']
+                ],
+                'AND',
+                [SL.FIELDS.AMOUNT_DESC, 'isnotempty', ''],
+                'AND',
+                [SL.FIELDS.AMOUNT, 'notequalto', '0.00']
+            ],
+            columns: [
+                search.createColumn({ name: SL.FIELDS.MARKETPLACE, summary: search.Summary.GROUP }),
+                search.createColumn({ name: SL.FIELDS.AMOUNT_DESC, summary: search.Summary.GROUP }),
+                search.createColumn({
+                    name: 'formulatext',
+                    summary: search.Summary.GROUP,
+                    formula: "TO_CHAR({" + SL.FIELDS.POST_DATE_NS + "}, 'MONTH, YYYY')"
+                }),
+                search.createColumn({
+                    name: SL.FIELDS.POST_DATE_NS,
+                    summary: search.Summary.MAX,
+                    sort: search.Sort.ASC
+                }),
+                search.createColumn({ name: SL.FIELDS.AMOUNT, summary: search.Summary.SUM }),
+                search.createColumn({ name: SL.FIELDS.AMOUNT_TYPE, summary: search.Summary.GROUP })
+            ]
+        });
+
+        var chargeResults = [];
+        chargeSearch.run().each(function (r) {
+            chargeResults.push(r);
+            return true;
+        });
+
+        if (chargeResults.length === 0) {
+            logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                'Phase D: No other charge lines found for settlement ' + reportId);
+            return jeIds;
+        }
+
+        // Resolve currency
+        var nsCurrency = resolveCurrencyId(currency);
+
+        // Create JEs grouped by month
+        var currentJe = null;
+        var currentTotal = 0;
+        var prevMonth = '';
+
+        for (var y = 0; y < chargeResults.length; y++) {
+            var columns = chargeResults[y].getAllColumns();
+            var amt = parseFloat(chargeResults[y].getValue(columns[4])) || 0;
+            if (amt === 0) continue;
+
+            var mp = chargeResults[y].getValue(columns[0]);
+            var desc = chargeResults[y].getValue(columns[1]);
+            var month = chargeResults[y].getValue(columns[2]);
+            var maxDate = chargeResults[y].getValue(columns[3]);
+            var amtType = chargeResults[y].getValue(columns[5]);
+
+            // Override desc for specific amount types (like old process)
+            if (amtType === 'Cost of Advertising' || amtType === 'CouponRedemptionFee') {
+                desc = amtType;
+            }
+            if (mp === 'Non-Amazon') {
+                desc = 'AMAZON FBA FEES (WEBSITE)';
+            }
+
+            // When month changes, save current JE and start new one
+            if (month !== prevMonth && currentJe !== null) {
+                addBalancingDebitLine(currentJe, config, currentTotal, reportId);
+                var savedId = currentJe.save({ ignoreMandatoryFields: true });
+                jeIds.push(savedId);
+                currentJe = null;
+                currentTotal = 0;
+            }
+
+            // Create new JE if needed
+            if (currentJe === null) {
+                currentJe = record.create({
+                    type: record.Type.JOURNAL_ENTRY,
+                    isDynamic: true
+                });
+                if (nsCurrency) {
+                    currentJe.setValue({ fieldId: 'currency', value: nsCurrency });
+                }
+                if (config.subsidiary) {
+                    currentJe.setValue({ fieldId: 'subsidiary', value: config.subsidiary });
+                }
+                currentJe.setValue({
+                    fieldId: 'memo',
+                    value: 'Other Charges for Settlement: ' + reportId
+                });
+                try {
+                    currentJe.setValue({ fieldId: 'custbody_amz_settlement_id', value: reportId });
+                } catch (ignore) { }
+                if (maxDate) {
+                    currentJe.setValue({ fieldId: 'trandate', value: new Date(maxDate) });
+                }
+            }
+
+            prevMonth = month;
+            currentTotal = parseFloat((Number(currentTotal) + Number(amt)).toFixed(2));
+
+            // Look up credit account
+            var acct = lookupChargeAccount(desc, chargeMap, config, nsCurrency);
+
+            if (acct) {
+                currentJe.selectNewLine({ sublistId: 'line' });
+                currentJe.setCurrentSublistValue({ sublistId: 'line', fieldId: 'account', value: acct });
+                currentJe.setCurrentSublistValue({ sublistId: 'line', fieldId: 'credit', value: Math.abs(amt) });
+                currentJe.setCurrentSublistValue({
+                    sublistId: 'line', fieldId: 'memo',
+                    value: desc + ' - ' + reportId
+                });
+                currentJe.commitLine({ sublistId: 'line' });
+            }
+        }
+
+        // Save final JE
+        if (currentJe !== null) {
+            addBalancingDebitLine(currentJe, config, currentTotal, reportId);
+            var finalId = currentJe.save({ ignoreMandatoryFields: true });
+            jeIds.push(finalId);
+        }
+
+        if (jeIds.length > 0) {
+            logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
+                'Phase D: Created ' + jeIds.length + ' JE(s) for settlement ' + reportId +
+                ': ' + jeIds.join(', '));
+        }
+
+        return jeIds;
+    }
+
+    // ========================================================================
+    // Helper functions
+    // ========================================================================
+
+    /**
+     * Searches settlement lines for a given settlement, order, and transaction type.
+     * Returns array of line objects suitable for financialService functions.
+     */
+    function getSettlementLines(settlementId, orderId, tranType) {
+        var lines = [];
+        var filters = [
+            [SL.FIELDS.SUMMARY, 'anyof', settlementId],
+            'AND',
+            [SL.FIELDS.ORDER_ID, 'is', orderId],
+            'AND',
+            [SL.FIELDS.TRAN_TYPE, 'is', tranType],
+            'AND',
+            [SL.FIELDS.PROCESSED, 'is', 'F']
+        ];
+
+        search.create({
+            type: SL.ID,
+            filters: filters,
+            columns: [
+                search.createColumn({ name: 'internalid', sort: search.Sort.ASC }),
+                SL.FIELDS.SETTLEMENT_ID,
+                SL.FIELDS.ORDER_ID,
+                SL.FIELDS.MARKETPLACE,
+                SL.FIELDS.TRAN_TYPE,
+                SL.FIELDS.AMOUNT_TYPE,
+                SL.FIELDS.AMOUNT_DESC,
+                SL.FIELDS.AMOUNT,
+                SL.FIELDS.CURRENCY,
+                SL.FIELDS.SKU,
+                SL.FIELDS.QUANTITY,
+                SL.FIELDS.POST_DATE,
+                SL.FIELDS.POST_DATE_NS,
+                SL.FIELDS.PROMO_ID
+            ]
+        }).run().each(function (result) {
+            lines.push({
+                id: result.id,
+                settlementId: result.getValue(SL.FIELDS.SETTLEMENT_ID),
+                orderId: result.getValue(SL.FIELDS.ORDER_ID),
+                marketplace: result.getValue(SL.FIELDS.MARKETPLACE),
+                tranType: result.getValue(SL.FIELDS.TRAN_TYPE),
+                amountType: result.getValue(SL.FIELDS.AMOUNT_TYPE),
+                amountDesc: result.getValue(SL.FIELDS.AMOUNT_DESC),
+                amount: result.getValue(SL.FIELDS.AMOUNT),
+                currency: result.getValue(SL.FIELDS.CURRENCY),
+                sku: result.getValue(SL.FIELDS.SKU),
+                quantity: result.getValue(SL.FIELDS.QUANTITY),
+                postDate: result.getValue(SL.FIELDS.POST_DATE),
+                postDateNs: result.getValue(SL.FIELDS.POST_DATE_NS),
+                promoId: result.getValue(SL.FIELDS.PROMO_ID)
+            });
+            return true;
+        });
+
+        return lines;
+    }
+
+    /**
+     * Marks an array of settlement lines as processed.
+     */
+    function markLinesProcessed(lines) {
+        for (var i = 0; i < lines.length; i++) {
+            try {
+                record.submitFields({
+                    type: SL.ID,
+                    id: lines[i].id,
+                    values: { [SL.FIELDS.PROCESSED]: true }
+                });
+            } catch (e) {
+                logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
+                    'Could not mark line ' + lines[i].id + ' as processed: ' + e.message);
+            }
+        }
+    }
+
+    /**
+     * Adds a balancing debit line to a JE.
+     */
+    function addBalancingDebitLine(je, config, total, settlementId) {
+        var debitAccount = config.settleAccount || config.feeAccount;
+        if (!debitAccount) return;
+
+        je.selectNewLine({ sublistId: 'line' });
+        je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'account', value: debitAccount });
+        je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'debit', value: Math.abs(total) });
+        je.setCurrentSublistValue({ sublistId: 'line', fieldId: 'memo', value: 'Cash - ' + settlementId });
+        je.commitLine({ sublistId: 'line' });
+    }
+
+    /**
+     * Looks up the GL account for a charge description using the charge account map.
+     * Fallback chain: chargeMap.map[desc].account → chargeMap.defaultAccount →
+     *   currency-specific default (config.feeAccount for USD, config.defaultFeeAcctCad for CAD,
+     *   config.defaultFeeAcctMxn for MXN) → config.feeAccount
+     */
+    function lookupChargeAccount(description, chargeMap, config, nsCurrency) {
+        var key = (description || '').toLowerCase().trim();
+        if (chargeMap && chargeMap.map && chargeMap.map[key]) {
+            if (chargeMap.map[key].account) return chargeMap.map[key].account;
+        }
+        if (chargeMap && chargeMap.defaultAccount) return chargeMap.defaultAccount;
+
+        // Currency-specific fallback
+        if (nsCurrency === '3' && config.defaultFeeAcctCad) return config.defaultFeeAcctCad;
+        if (nsCurrency === '5' && config.defaultFeeAcctMxn) return config.defaultFeeAcctMxn;
+        return config.feeAccount || null;
+    }
+
+    /**
+     * Resolves a currency code to NS internal ID.
+     */
+    function resolveCurrencyId(currencyCode) {
+        if (!currencyCode) return null;
+        var map = { 'USD': '1', 'CAD': '3', 'MXN': '5' };
+        return map[currencyCode.toUpperCase()] || null;
+    }
+
+    function summarize(summary) {
         logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-            'Settlement MR summarize: Reduce stage completed with ' + reduceErrorCount + ' error(s)');
+            'Settlement Process MR summarize: Execution completed');
+
+        if (summary.inputSummary.error) {
+            logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                'Settlement Process MR: Input error: ' + summary.inputSummary.error);
+        }
+
+        var mapErrors = 0;
+        summary.mapSummary.errors.iterator().each(function (key, error) {
+            mapErrors++;
+            logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                'Settlement Process MR: Map error [' + key + ']: ' + error);
+            return true;
+        });
+
+        var reduceErrors = 0;
+        summary.reduceSummary.errors.iterator().each(function (key, error) {
+            reduceErrors++;
+            logger.error(constants.LOG_TYPE.FINANCIAL_RECON,
+                'Settlement Process MR: Reduce error [' + key + ']: ' + error);
+            return true;
+        });
 
         logger.success(constants.LOG_TYPE.SETTLEMENT_SYNC,
-            'Settlement MR summarize: Full execution finished. Map errors: ' + mapErrorCount +
-            ', Reduce errors: ' + reduceErrorCount);
+            'Settlement Process MR complete. Map errors: ' + mapErrors +
+            ', Reduce errors: ' + reduceErrors);
     }
 
     return { getInputData, map, reduce, summarize };
