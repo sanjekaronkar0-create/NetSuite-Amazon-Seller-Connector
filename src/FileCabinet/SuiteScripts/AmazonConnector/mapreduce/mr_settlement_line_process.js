@@ -95,16 +95,38 @@ define([
             // Create or find summary record
             var existingId = settlementService.findExistingSettlement(report.reportId);
             var summaryId;
+            var existingLineIds = [];
             if (existingId) {
                 summaryId = existingId;
+                // Search for existing lines to emit as delete operations in reduce
+                // (avoids governance exhaustion from bulk deletion in map stage)
+                search.create({
+                    type: SL.ID,
+                    filters: [[SL.FIELDS.SUMMARY, 'anyof', summaryId]],
+                    columns: ['internalid']
+                }).run().each(function (result) {
+                    existingLineIds.push(result.id);
+                    return true;
+                });
                 logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
                     'Settlement Line MR map: Reusing existing summary record ' + existingId +
-                    '. Deleting existing lines to prevent duplicates on re-run.');
-                deleteExistingLines(summaryId);
+                    '. Found ' + existingLineIds.length + ' existing line(s) to delete via reduce.');
             } else {
                 summaryId = settlementService.createSettlementRecord(config, report, parsed.summary);
                 logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
                     'Settlement Line MR map: Created summary record ' + summaryId);
+            }
+
+            // Emit delete operations for existing lines (each reduce gets fresh governance)
+            for (var d = 0; d < existingLineIds.length; d++) {
+                context.write({
+                    key: 'del|' + summaryId + '|' + d,
+                    value: JSON.stringify({
+                        action: 'delete',
+                        lineId: existingLineIds[d],
+                        summaryId: summaryId
+                    })
+                });
             }
 
             // Store raw settlement file
@@ -146,6 +168,7 @@ define([
                 context.write({
                     key: summaryId + '|' + i,
                     value: JSON.stringify({
+                        action: 'create',
                         configId: configId,
                         summaryId: summaryId,
                         reportId: report.reportId,
@@ -156,7 +179,19 @@ define([
             }
 
             logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                'Settlement Line MR map: Emitted ' + parsed.rows.length + ' rows for reduce. Report ' +
+                'Settlement Line MR map: Processing report ' + report.reportId +
+                ' [configId=' + configId +
+                ', reportDocId=' + report.reportDocumentId +
+                ', rowCount=' + parsed.rows.length +
+                ', existingSettlement=' + (existingId || 'none') +
+                ', existingLinesToDelete=' + existingLineIds.length +
+                ', currency=' + (currency || 'N/A') +
+                ', depositDate=' + (depositDate || 'N/A') +
+                ', settlementTotal=' + (settlementTotal || 'N/A') + ']');
+
+            logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                'Settlement Line MR map: Emitted ' + existingLineIds.length + ' delete(s) + ' +
+                parsed.rows.length + ' create(s) for reduce. Report ' +
                 report.reportId + ', summary ' + summaryId);
 
         } catch (e) {
@@ -172,10 +207,43 @@ define([
     function reduce(context) {
         try {
             var data = JSON.parse(context.values[0]);
-            var row = data.row;
-            if (!row) return;
+            var action = data.action || 'create';
 
-            createSettlementLine(data.configId, data.summaryId, data.reportId, row);
+            if (action === 'delete') {
+                // Delete existing line record (distributed across reduce for governance safety)
+                try {
+                    record.delete({ type: SL.ID, id: data.lineId });
+                    logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                        'Settlement Line MR reduce: Deleted existing line ' + data.lineId +
+                        ' for summary ' + data.summaryId);
+                } catch (delErr) {
+                    logger.warn(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                        'Settlement Line MR reduce: Could not delete line ' + data.lineId +
+                        ': ' + delErr.message);
+                }
+                // Do NOT emit to output for delete actions - summarize only aggregates creates
+                return;
+            }
+
+            // action === 'create'
+            var row = data.row;
+            if (!row) {
+                logger.warn(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                    'Settlement Line MR reduce: No row data for key ' + context.key + '. Skipping.');
+                return;
+            }
+
+            var lineRecId = createSettlementLine(data.configId, data.summaryId, data.reportId, row);
+
+            logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                'Settlement Line MR reduce: Created line ' + lineRecId +
+                ' [order=' + (row['order-id'] || '') +
+                ', type=' + (row['transaction-type'] || '') +
+                ', amountType=' + (row['amount-type'] || '') +
+                ', desc=' + (row['amount-description'] || '') +
+                ', amount=' + (row['amount'] || row['total'] || '0') +
+                ', sku=' + (row['sku'] || '') +
+                '] for summary ' + data.summaryId);
 
             // Write summaryId so summarize can collect unique settlements for aggregation
             context.write({
@@ -244,11 +312,27 @@ define([
                     }
                 }
             } catch (dateErr) {
-                // Non-fatal - line still gets created without converted date
+                logger.warn(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                    'createSettlementLine: Date conversion error for postDate "' + postDate +
+                    '", order ' + orderId + ': ' + dateErr.message);
             }
         }
 
-        return rec.save({ ignoreMandatoryFields: true });
+        var savedId = rec.save({ ignoreMandatoryFields: true });
+
+        logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+            'createSettlementLine: Saved line ' + savedId +
+            ' [settlement=' + settlementId +
+            ', order=' + orderId +
+            ', type=' + tranType +
+            ', amountType=' + amountType +
+            ', desc=' + amountDesc +
+            ', amount=' + amount +
+            ', sku=' + sku +
+            ', postDate=' + postDate +
+            ', marketplace=' + marketplace + ']');
+
+        return savedId;
     }
 
     /**
@@ -305,37 +389,6 @@ define([
             return results[0].id;
         }
         return null;
-    }
-
-    /**
-     * Deletes all existing settlement line records for a given summary.
-     * Prevents duplicate lines when the map stage re-runs after a partial failure.
-     * @param {string|number} summaryId - Settlement summary record internal ID
-     */
-    function deleteExistingLines(summaryId) {
-        var lineIds = [];
-        search.create({
-            type: SL.ID,
-            filters: [[SL.FIELDS.SUMMARY, 'anyof', summaryId]],
-            columns: ['internalid']
-        }).run().each(function (result) {
-            lineIds.push(result.id);
-            return true;
-        });
-
-        if (lineIds.length === 0) return;
-
-        logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-            'deleteExistingLines: Deleting ' + lineIds.length + ' existing line(s) for summary ' + summaryId);
-
-        for (var i = 0; i < lineIds.length; i++) {
-            try {
-                record.delete({ type: SL.ID, id: lineIds[i] });
-            } catch (e) {
-                logger.warn(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                    'deleteExistingLines: Could not delete line ' + lineIds[i] + ': ' + e.message);
-            }
-        }
     }
 
     /**
@@ -455,6 +508,15 @@ define([
 
             try {
                 var totals = recalcSummaryTotals(summaryId);
+
+                logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                    'Settlement Line MR summarize: Aggregated settlement ' + summaryId +
+                    ' (report ' + info.reportId + ')' +
+                    ' - payments: ' + totals.totalPayments +
+                    ', refunds: ' + totals.totalRefunds +
+                    ', other: ' + totals.totalOtherCharges +
+                    ', total: ' + totals.settlementTotal +
+                    ', lines: ' + totals.lineCount);
 
                 var updateValues = {};
                 updateValues[STL.FIELDS.TOTAL_PAYMENTS] = totals.totalPayments;
