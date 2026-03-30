@@ -162,6 +162,27 @@ define([
                 });
             }
 
+            // Guard against empty reports - if no rows, mark settlement as PENDING with zero totals
+            // to avoid leaving it stuck in PROCESSING status indefinitely
+            if (parsed.rows.length === 0 && existingLineIds.length === 0) {
+                logger.warn(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                    'Settlement Line MR map: Report ' + report.reportId +
+                    ' has 0 data rows and no existing lines. Setting summary ' + summaryId + ' to PENDING with zero totals.');
+                record.submitFields({
+                    type: STL.ID,
+                    id: summaryId,
+                    values: {
+                        [STL.FIELDS.TOTAL_PAYMENTS]: 0,
+                        [STL.FIELDS.TOTAL_REFUNDS]: 0,
+                        [STL.FIELDS.TOTAL_OTHER]: 0,
+                        [STL.FIELDS.TOTAL_AMOUNT]: 0,
+                        [STL.FIELDS.RECALC]: false,
+                        [STL.FIELDS.STATUS]: constants.SETTLEMENT_STATUS.PENDING
+                    }
+                });
+                return;
+            }
+
             // Emit each row individually so reduce creates records within governance limits.
             // Key format: summaryId|lineIndex ensures each row gets its own reduce invocation.
             for (var i = 0; i < parsed.rows.length; i++) {
@@ -196,7 +217,16 @@ define([
 
         } catch (e) {
             logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                'Settlement Line MR map error: ' + e.message, { details: e.stack });
+                'Settlement Line MR map error for report ' + (report && report.reportId || 'unknown') +
+                ': ' + e.message, { details: e.stack });
+
+            errorQueue.enqueue({
+                type: constants.ERROR_QUEUE_TYPE.SETTLEMENT_PROCESS,
+                amazonRef: (report && report.reportId) || 'unknown',
+                errorMsg: 'Map stage error: ' + e.message,
+                configId: (report && report._configId) || '',
+                payload: JSON.stringify({ reportId: (report && report.reportId) || 'unknown' })
+            });
         }
     }
 
@@ -229,7 +259,9 @@ define([
             var row = data.row;
             if (!row) {
                 logger.warn(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                    'Settlement Line MR reduce: No row data for key ' + context.key + '. Skipping.');
+                    'Settlement Line MR reduce: No row data for key ' + context.key +
+                    ' (summary=' + (data.summaryId || 'N/A') +
+                    ', report=' + (data.reportId || 'N/A') + '). Skipping.');
                 return;
             }
 
