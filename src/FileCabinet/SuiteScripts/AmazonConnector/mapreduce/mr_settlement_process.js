@@ -118,38 +118,67 @@ define([
             // ================================================================
             // Phase B: Create Invoices + Payments
             // ================================================================
-            phaseB_createInvoicesAndPayments(config, settlementId, reportId, headers, chargeMap);
+            var phaseB = phaseB_createInvoicesAndPayments(config, settlementId, reportId, headers, chargeMap);
 
             // ================================================================
             // Phase C: Create Credit Memos + Refunds
             // ================================================================
-            phaseC_createCreditMemosAndRefunds(config, settlementId, reportId, headers, chargeMap);
+            var phaseC = phaseC_createCreditMemosAndRefunds(config, settlementId, reportId, headers, chargeMap);
 
             // ================================================================
             // Phase D: Create JEs for Other Charges
             // ================================================================
             var journalIds = [];
             var noJe = data.noJe === true || data.noJe === 'T';
-            if (!noJe && data.totalOther !== 0) {
+            if (!noJe) {
                 journalIds = phaseD_createChargeJournalEntries(
                     config, settlementId, reportId, data.currency, data.expectedTotal, data.totalAmount, chargeMap
                 );
             }
 
             // ================================================================
-            // Mark RECONCILED
+            // Mark RECONCILED or ERROR based on results
             // ================================================================
-            financialService.updateSettlementFinancials(settlementId, {
-                journalIds: journalIds
-            });
+            var totalCreated = phaseB.invoiceIds.length + phaseB.paymentIds.length +
+                phaseC.creditMemoIds.length + phaseC.refundIds.length + journalIds.length;
 
-            logger.success(constants.LOG_TYPE.FINANCIAL_RECON,
-                'Settlement ' + reportId + ' reconciled. ' +
-                'Headers: ' + Object.keys(headers).length +
-                (journalIds.length ? ', JEs: ' + journalIds.join(',') : ''), {
-                configId: configId,
-                amazonRef: reportId
-            });
+            if (totalCreated > 0) {
+                financialService.updateSettlementFinancials(settlementId, {
+                    journalIds: journalIds,
+                    invoiceIds: phaseB.invoiceIds,
+                    paymentIds: phaseB.paymentIds,
+                    creditMemoIds: phaseC.creditMemoIds,
+                    refundIds: phaseC.refundIds
+                });
+
+                logger.success(constants.LOG_TYPE.FINANCIAL_RECON,
+                    'Settlement ' + reportId + ' reconciled. ' +
+                    'Headers: ' + Object.keys(headers).length +
+                    ', Invoices: ' + phaseB.invoiceIds.length +
+                    ', Payments: ' + phaseB.paymentIds.length +
+                    ', CreditMemos: ' + phaseC.creditMemoIds.length +
+                    ', Refunds: ' + phaseC.refundIds.length +
+                    (journalIds.length ? ', JEs: ' + journalIds.join(',') : ''), {
+                    configId: configId,
+                    amazonRef: reportId
+                });
+            } else {
+                logger.error(constants.LOG_TYPE.FINANCIAL_RECON,
+                    'Settlement ' + reportId + ': No financial records created. ' +
+                    'Headers: ' + Object.keys(headers).length +
+                    '. Check charge map configuration and settlement line data.', {
+                    configId: configId,
+                    amazonRef: reportId
+                });
+
+                record.submitFields({
+                    type: STL.ID,
+                    id: settlementId,
+                    values: {
+                        [STL.FIELDS.STATUS]: constants.SETTLEMENT_STATUS.ERROR
+                    }
+                });
+            }
 
         } catch (e) {
             logger.error(constants.LOG_TYPE.FINANCIAL_RECON,
@@ -274,6 +303,8 @@ define([
     // ========================================================================
 
     function phaseB_createInvoicesAndPayments(config, settlementId, reportId, headers, chargeMap) {
+        var results = { invoiceIds: [], paymentIds: [] };
+
         // Search headers where update_inv = T for this settlement
         var headerSearch = search.create({
             type: SH.ID,
@@ -343,7 +374,7 @@ define([
 
                 // Create customer payment
                 var paymentId = null;
-                if (invoiceId && paymentTotal) {
+                if (invoiceId && paymentTotal != null && paymentTotal !== 0) {
                     var firstLine = orderLines[0] || {};
                     var settlement = {
                         reportId: reportId,
@@ -354,6 +385,10 @@ define([
                         config, invoiceId, settlement, firstLine.postDateNs
                     );
                 }
+
+                // Track created records
+                if (invoiceId) results.invoiceIds.push(invoiceId);
+                if (paymentId) results.paymentIds.push(paymentId);
 
                 // Mark order lines as processed
                 markLinesProcessed(orderLines);
@@ -386,6 +421,8 @@ define([
 
             return true;
         });
+
+        return results;
     }
 
     // ========================================================================
@@ -393,6 +430,8 @@ define([
     // ========================================================================
 
     function phaseC_createCreditMemosAndRefunds(config, settlementId, reportId, headers, chargeMap) {
+        var results = { creditMemoIds: [], refundIds: [] };
+
         var headerSearch = search.create({
             type: SH.ID,
             filters: [
@@ -430,6 +469,10 @@ define([
                     refundId = financialService.createSettlementRefund(config, creditMemoId, settlId);
                 }
 
+                // Track created records
+                if (creditMemoId) results.creditMemoIds.push(creditMemoId);
+                if (refundId) results.refundIds.push(refundId);
+
                 // Mark refund lines as processed
                 markLinesProcessed(refundLines);
 
@@ -459,6 +502,8 @@ define([
 
             return true;
         });
+
+        return results;
     }
 
     // ========================================================================
@@ -472,15 +517,14 @@ define([
     function phaseD_createChargeJournalEntries(config, settlementId, reportId, currency, expectedTotal, totalAmount, chargeMap) {
         var jeIds = [];
 
-        // Check trigger conditions (like old process)
-        if (expectedTotal && totalAmount) {
+        // Check trigger conditions — warn on mismatch but proceed with JE creation
+        if (expectedTotal != null && totalAmount != null) {
             var totalDiff = Math.abs(parseFloat(expectedTotal) - parseFloat(totalAmount));
-            if (totalDiff > 0.01) {
+            if (totalDiff > 0.05) {
                 logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
                     'Phase D: Expected total (' + expectedTotal + ') != actual total (' + totalAmount +
                     '), diff=' + totalDiff.toFixed(4) +
-                    ' for settlement ' + reportId + '. Skipping JE creation.');
-                return jeIds;
+                    ' for settlement ' + reportId + '. Proceeding with JE creation despite mismatch.');
             }
         }
 

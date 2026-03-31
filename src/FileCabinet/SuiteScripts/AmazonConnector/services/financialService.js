@@ -254,9 +254,12 @@ define([
         }
 
         if (lineCount === 0) {
+            var mapEntryCount = (chargeMap && chargeMap.map) ? Object.keys(chargeMap.map).length : 0;
             logger.warn(constants.LOG_TYPE.SETTLEMENT_SYNC,
                 'financialService.createSettlementInvoice: No lines added for order ' + orderId +
-                '. Skipping invoice creation - check charge map configuration.');
+                '. Skipping invoice creation. Charge map has ' + mapEntryCount + ' entries. ' +
+                'Total lines examined: ' + orderLines.length + '. ' +
+                'Ensure charge map is configured for this marketplace (' + (marketplace || 'unknown') + ').');
             return { invoiceId: null, paymentTotal: paymentTotal };
         }
 
@@ -378,9 +381,12 @@ define([
         }
 
         if (lineCount === 0) {
+            var mapEntryCount = (chargeMap && chargeMap.map) ? Object.keys(chargeMap.map).length : 0;
             logger.warn(constants.LOG_TYPE.SETTLEMENT_SYNC,
                 'financialService.createSettlementCreditMemo: No lines added for order ' + orderId +
-                '. Skipping credit memo creation - check charge map configuration.');
+                '. Skipping credit memo creation. Charge map has ' + mapEntryCount + ' entries. ' +
+                'Total lines examined: ' + refundLines.length + '. ' +
+                'Ensure charge map is configured for this marketplace (' + (marketplace || 'unknown') + ').');
             return null;
         }
 
@@ -606,24 +612,30 @@ define([
      */
     function updateSettlementFinancials(settlementId, options) {
         options = options || {};
+
+        var invoiceIds = options.invoiceIds || (options.invoiceId ? [options.invoiceId] : []);
+        var paymentIds = options.paymentIds || [];
+        var creditMemoIds = options.creditMemoIds || [];
+        var refundIds = options.refundIds || [];
+        var journalIds = options.journalIds || (options.journalId ? [options.journalId] : []);
+
         logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
             'financialService.updateSettlementFinancials: Marking settlement ' + settlementId + ' as RECONCILED. ' +
-            'depositId: ' + (options.depositId || 'none') +
-            ', invoiceId: ' + (options.invoiceId || 'none') +
-            ', journalId: ' + (options.journalId || 'none') +
-            ', journalIds: ' + (options.journalIds && options.journalIds.length ? options.journalIds.join(',') : 'none'));
+            'Invoices: ' + (invoiceIds.length ? invoiceIds.join(',') : 'none') +
+            ', Payments: ' + (paymentIds.length ? paymentIds.join(',') : 'none') +
+            ', CreditMemos: ' + (creditMemoIds.length ? creditMemoIds.join(',') : 'none') +
+            ', Refunds: ' + (refundIds.length ? refundIds.join(',') : 'none') +
+            ', JEs: ' + (journalIds.length ? journalIds.join(',') : 'none'));
 
         const values = { [STL.FIELDS.STATUS]: constants.SETTLEMENT_STATUS.RECONCILED };
 
         if (options.depositId) values[STL.FIELDS.NS_DEPOSIT] = options.depositId;
-        if (options.invoiceId) values[STL.FIELDS.NS_INVOICE] = options.invoiceId;
-        if (options.journalId) values[STL.FIELDS.NS_JOURNAL] = options.journalId;
-        if (options.journalIds && options.journalIds.length > 0) {
-            values[STL.FIELDS.NS_JOURNALS] = options.journalIds.join(',');
-            // Also set the first JE as the primary reference
-            if (!options.journalId) {
-                values[STL.FIELDS.NS_JOURNAL] = options.journalIds[0];
-            }
+        if (invoiceIds.length > 0) {
+            values[STL.FIELDS.NS_INVOICE] = invoiceIds.join(',');
+        }
+        if (journalIds.length > 0) {
+            values[STL.FIELDS.NS_JOURNALS] = journalIds.join(',');
+            values[STL.FIELDS.NS_JOURNAL] = journalIds[0];
         }
 
         record.submitFields({
