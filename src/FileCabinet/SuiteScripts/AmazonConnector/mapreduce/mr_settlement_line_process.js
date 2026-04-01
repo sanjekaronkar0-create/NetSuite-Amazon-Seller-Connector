@@ -13,7 +13,6 @@
  *              and triggers the next M/R stage.
  */
 define([
-    'N/runtime',
     'N/record',
     'N/search',
     'N/format',
@@ -24,7 +23,7 @@ define([
     '../lib/errorQueue',
     '../lib/logger',
     '../services/settlementService'
-], function (runtime, record, search, format, log, task, constants, configHelper, errorQueue, logger,
+], function (record, search, format, log, task, constants, configHelper, errorQueue, logger,
     settlementService) {
 
     const STL = constants.CUSTOM_RECORDS.SETTLEMENT;

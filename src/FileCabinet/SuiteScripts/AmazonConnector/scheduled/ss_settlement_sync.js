@@ -6,7 +6,6 @@
  */
 define([
     'N/task',
-    'N/runtime',
     'N/record',
     'N/log',
     '../lib/constants',
@@ -14,7 +13,7 @@ define([
     '../lib/logger',
     '../services/settlementService',
     '../services/notificationService'
-], function (task, runtime, record, log, constants, configHelper, logger, settlementService, notificationService) {
+], function (task, record, log, constants, configHelper, logger, settlementService, notificationService) {
 
     const CR = constants.CUSTOM_RECORDS.CONFIG;
 

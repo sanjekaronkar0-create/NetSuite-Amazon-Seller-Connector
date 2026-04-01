@@ -252,22 +252,28 @@ define([
      */
     function isSettlementProcessed(reportId) {
         let found = false;
+        let foundStatus = '';
         search.create({
             type: STL.ID,
             filters: [
                 [STL.FIELDS.REPORT_ID, 'is', reportId],
                 'AND',
-                [STL.FIELDS.STATUS, 'anyof', [constants.SETTLEMENT_STATUS.RECONCILED]]
+                [STL.FIELDS.STATUS, 'anyof', [
+                    constants.SETTLEMENT_STATUS.RECONCILED,
+                    constants.SETTLEMENT_STATUS.AWAITING_LINES,
+                    constants.SETTLEMENT_STATUS.PROCESSING
+                ]]
             ],
-            columns: ['internalid']
-        }).run().each(function () {
+            columns: ['internalid', STL.FIELDS.STATUS]
+        }).run().each(function (result) {
             found = true;
+            foundStatus = result.getText(STL.FIELDS.STATUS) || result.getValue(STL.FIELDS.STATUS);
             return false;
         });
 
         logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
             'settlementService.isSettlementProcessed: Report ' + reportId +
-            (found ? ' has already been RECONCILED - will be skipped' : ' has NOT been reconciled yet - eligible for processing'));
+            (found ? ' is already ' + foundStatus + ' - will be skipped' : ' is eligible for processing'));
 
         return found;
     }

@@ -9,7 +9,6 @@
  *              Phase D: Create JEs for other charges grouped by month
  */
 define([
-    'N/runtime',
     'N/record',
     'N/search',
     'N/format',
@@ -19,7 +18,7 @@ define([
     '../lib/errorQueue',
     '../lib/logger',
     '../services/financialService'
-], function (runtime, record, search, format, log, constants, configHelper, errorQueue, logger,
+], function (record, search, format, log, constants, configHelper, errorQueue, logger,
     financialService) {
 
     const STL = constants.CUSTOM_RECORDS.SETTLEMENT;
