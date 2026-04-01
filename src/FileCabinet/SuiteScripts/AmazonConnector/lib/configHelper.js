@@ -505,6 +505,49 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
         return { map: chargeMap, defaultAccount: defaultAccount };
     }
 
+    /**
+     * Resolves effective config values by marketplace name (e.g. 'Amazon.ca').
+     * Used by settlement processing where only the marketplace name is available
+     * (unlike order import which has a marketplace ID).
+     * @param {Object} config - Base connector config
+     * @param {string} marketplaceName - Marketplace name from settlement data
+     * @returns {Object} Merged config with marketplace overrides applied
+     */
+    function resolveMarketplaceSettingsByName(config, marketplaceName) {
+        if (!marketplaceName) return config;
+
+        var mktConfigs = getMarketplaceConfigs(config.configId);
+        var mktCfg = null;
+        for (var i = 0; i < mktConfigs.length; i++) {
+            if (mktConfigs[i].marketplaceName === marketplaceName) {
+                mktCfg = mktConfigs[i];
+                break;
+            }
+        }
+        if (!mktCfg) return config;
+
+        var resolved = {};
+        for (var key in config) {
+            if (config.hasOwnProperty(key)) {
+                resolved[key] = config[key];
+            }
+        }
+
+        if (mktCfg.customer) resolved.customer = mktCfg.customer;
+        if (mktCfg.fbaCustomer) resolved.fbaCustomer = mktCfg.fbaCustomer;
+        if (mktCfg.b2bCustomer) resolved.b2bCustomer = mktCfg.b2bCustomer;
+        if (mktCfg.subsidiary) resolved.subsidiary = mktCfg.subsidiary;
+        if (mktCfg.location) resolved.location = mktCfg.location;
+        if (mktCfg.fbaLocation) resolved.fbaLocation = mktCfg.fbaLocation;
+        if (mktCfg.paymentMethod) resolved.paymentMethod = mktCfg.paymentMethod;
+        if (mktCfg.taxItem) resolved.taxItem = mktCfg.taxItem;
+        if (mktCfg.taxCode) resolved.taxCode = mktCfg.taxCode;
+
+        resolved._marketplaceConfigId = mktCfg.id;
+
+        return resolved;
+    }
+
     return {
         getAllConfigs,
         getConfig,
@@ -512,6 +555,7 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
         getMarketplaceConfigs,
         getMarketplaceConfig,
         resolveMarketplaceSettings,
+        resolveMarketplaceSettingsByName,
         getChargeAccountMap
     };
 });
