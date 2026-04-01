@@ -20,5 +20,9 @@
       <isinactive>F</isinactive>
       <value>Error</value>
     </customvalue>
+    <customvalue scriptid="custrecord_amz_stl_status_5">
+      <isinactive>F</isinactive>
+      <value>Awaiting Lines</value>
+    </customvalue>
   </customvalues>
 </customlist>

@@ -9,7 +9,6 @@
  *              Phase D: Create JEs for other charges grouped by month
  */
 define([
-    'N/runtime',
     'N/record',
     'N/search',
     'N/format',
@@ -19,7 +18,7 @@ define([
     '../lib/errorQueue',
     '../lib/logger',
     '../services/financialService'
-], function (runtime, record, search, format, log, constants, configHelper, errorQueue, logger,
+], function (record, search, format, log, constants, configHelper, errorQueue, logger,
     financialService) {
 
     const STL = constants.CUSTOM_RECORDS.SETTLEMENT;
@@ -33,7 +32,7 @@ define([
         logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
             'Settlement Process MR getInputData: Searching for PENDING settlements');
 
-        return {
+        return search.create({
             type: STL.ID,
             filters: [[STL.FIELDS.STATUS, 'anyof', constants.SETTLEMENT_STATUS.PENDING]],
             columns: [
@@ -48,7 +47,7 @@ define([
                 STL.FIELDS.NO_JE,
                 STL.FIELDS.DEPOSIT_DATE
             ]
-        };
+        });
     }
 
     /**
@@ -56,8 +55,21 @@ define([
      */
     function map(context) {
         try {
-            var result = JSON.parse(context.value);
-            var settlementId = result.id;
+            var result;
+            try {
+                result = JSON.parse(context.value);
+            } catch (parseErr) {
+                logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                    'Settlement Process MR map: Failed to parse context.value (raw: ' +
+                    String(context.value).substring(0, 100) + '). key=' + context.key);
+                return;
+            }
+            var settlementId = result.id || context.key;
+            if (!settlementId) {
+                logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                    'Settlement Process MR map: No settlement ID found in result or key');
+                return;
+            }
             var configId = result.values ? result.values[STL.FIELDS.CONFIG] : null;
             if (configId && typeof configId === 'object') configId = configId.value || configId;
 

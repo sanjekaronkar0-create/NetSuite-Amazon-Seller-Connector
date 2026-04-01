@@ -13,7 +13,6 @@
  *              and triggers the next M/R stage.
  */
 define([
-    'N/runtime',
     'N/record',
     'N/search',
     'N/format',
@@ -23,101 +22,109 @@ define([
     '../lib/configHelper',
     '../lib/errorQueue',
     '../lib/logger',
-    '../lib/mrDataHelper',
     '../services/settlementService'
-], function (runtime, record, search, format, log, task, constants, configHelper, errorQueue, logger, mrDataHelper,
+], function (record, search, format, log, task, constants, configHelper, errorQueue, logger,
     settlementService) {
 
     const STL = constants.CUSTOM_RECORDS.SETTLEMENT;
     const SL = constants.CUSTOM_RECORDS.SETTLEMENT_LINE;
 
     /**
-     * Input stage: reads data file parameter written by ss_settlement_sync.js.
-     * Returns list of settlement reports to process.
+     * Input stage: searches for settlement records with AWAITING_LINES status.
      */
     function getInputData() {
         logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-            'Settlement Line MR getInputData: Starting input stage');
+            'Settlement Line MR getInputData: Searching for AWAITING_LINES settlements');
 
-        const dataParam = runtime.getCurrentScript().getParameter({
-            name: 'custscript_amz_mr_stl_line_data'
+        return search.create({
+            type: STL.ID,
+            filters: [[STL.FIELDS.STATUS, 'anyof', constants.SETTLEMENT_STATUS.AWAITING_LINES]],
+            columns: [
+                STL.FIELDS.REPORT_ID,
+                STL.FIELDS.REPORT_DOC_ID,
+                STL.FIELDS.CONFIG,
+                STL.FIELDS.START_DATE,
+                STL.FIELDS.END_DATE
+            ]
         });
-
-        if (dataParam) {
-            var fileData = mrDataHelper.readDataFile(dataParam);
-            var configId = fileData.configId;
-            var reports = fileData.reports || [];
-
-            logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                'Settlement Line MR getInputData: Found ' + reports.length +
-                ' report(s) for config ' + configId);
-
-            for (var i = 0; i < reports.length; i++) {
-                reports[i]._configId = configId;
-            }
-            return reports;
-        }
-
-        logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-            'Settlement Line MR getInputData: No data file parameter. Nothing to process.');
-        return [];
     }
 
     /**
-     * Map stage: For each settlement report:
+     * Map stage: For each AWAITING_LINES settlement record:
+     *  - Read reportDocumentId from the custom record
      *  - Download the TSV from Amazon
-     *  - Create/find summary record (customrecord_amz_settlement)
      *  - Emit each parsed row individually (keyed by unique line key)
      *    so that reduce creates records within governance limits.
      */
     function map(context) {
+        var result;
+        var summaryId;
+        var reportId = 'unknown';
+
         try {
-            var report = JSON.parse(context.value);
-            var configId = report._configId;
+            result = JSON.parse(context.value);
+            summaryId = result.id || context.key;
+            reportId = result.values ? result.values[STL.FIELDS.REPORT_ID] : '';
+            var reportDocId = result.values ? result.values[STL.FIELDS.REPORT_DOC_ID] : '';
+            var configId = result.values ? result.values[STL.FIELDS.CONFIG] : null;
+            var endDate = result.values ? result.values[STL.FIELDS.END_DATE] : '';
+            if (configId && typeof configId === 'object') configId = configId.value || configId;
+
+            if (!summaryId) {
+                logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                    'Settlement Line MR map: No settlement ID found');
+                return;
+            }
 
             if (!configId) {
                 logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                    'Settlement Line MR map: No configId for report ' + (report.reportId || 'unknown'));
+                    'Settlement Line MR map: No configId for settlement ' + summaryId);
                 return;
             }
+
+            if (!reportDocId) {
+                logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                    'Settlement Line MR map: No reportDocumentId for settlement ' + summaryId +
+                    ' (report ' + reportId + ')');
+                return;
+            }
+
+            // Mark as PROCESSING
+            record.submitFields({
+                type: STL.ID,
+                id: summaryId,
+                values: { [STL.FIELDS.STATUS]: constants.SETTLEMENT_STATUS.PROCESSING }
+            });
 
             var config = configHelper.getConfig(configId);
 
             logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                'Settlement Line MR map: Downloading report ' + report.reportId +
-                ' (docId: ' + report.reportDocumentId + ')');
+                'Settlement Line MR map: Downloading report ' + reportId +
+                ' (docId: ' + reportDocId + ') for settlement ' + summaryId);
 
-            var parsed = settlementService.downloadSettlementReport(config, report.reportDocumentId);
+            var parsed = settlementService.downloadSettlementReport(config, reportDocId);
 
             logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                'Settlement Line MR map: Parsed ' + parsed.rows.length + ' rows from report ' + report.reportId);
+                'Settlement Line MR map: Parsed ' + parsed.rows.length + ' rows from report ' + reportId);
 
-            // Create or find summary record
-            var existingId = settlementService.findExistingSettlement(report.reportId);
-            var summaryId;
+            // Search for existing lines to emit as delete operations in reduce
             var existingLineIds = [];
-            if (existingId) {
-                summaryId = existingId;
-                // Search for existing lines to emit as delete operations in reduce
-                // (avoids governance exhaustion from bulk deletion in map stage)
-                search.create({
-                    type: SL.ID,
-                    filters: [[SL.FIELDS.SUMMARY, 'anyof', summaryId]],
-                    columns: ['internalid']
-                }).run().each(function (result) {
-                    existingLineIds.push(result.id);
-                    return true;
-                });
+            search.create({
+                type: SL.ID,
+                filters: [[SL.FIELDS.SUMMARY, 'anyof', summaryId]],
+                columns: ['internalid']
+            }).run().each(function (r) {
+                existingLineIds.push(r.id);
+                return true;
+            });
+
+            if (existingLineIds.length > 0) {
                 logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                    'Settlement Line MR map: Reusing existing summary record ' + existingId +
-                    '. Found ' + existingLineIds.length + ' existing line(s) to delete via reduce.');
-            } else {
-                summaryId = settlementService.createSettlementRecord(config, report, parsed.summary);
-                logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                    'Settlement Line MR map: Created summary record ' + summaryId);
+                    'Settlement Line MR map: Found ' + existingLineIds.length +
+                    ' existing line(s) to delete via reduce for settlement ' + summaryId);
             }
 
-            // Emit delete operations for existing lines (each reduce gets fresh governance)
+            // Emit delete operations for existing lines
             for (var d = 0; d < existingLineIds.length; d++) {
                 context.write({
                     key: 'del|' + summaryId + '|' + d,
@@ -132,19 +139,17 @@ define([
             // Store raw settlement file
             if (parsed.rawData) {
                 try {
-                    settlementService.storeSettlementFile(report.reportId, parsed.rawData, summaryId);
+                    settlementService.storeSettlementFile(reportId, parsed.rawData, summaryId);
                 } catch (fileErr) {
                     logger.warn(constants.LOG_TYPE.SETTLEMENT_SYNC,
                         'Settlement Line MR map: Could not store file: ' + fileErr.message);
                 }
             }
 
-            // Extract settlement-level fields from the first row (like old process)
+            // Extract settlement-level fields from the first row
             var firstRow = parsed.rows.length > 0 ? parsed.rows[0] : {};
             var settlementTotal = firstRow['total-amount'] || firstRow['settlement-total'] || '';
             var depositDate = firstRow['deposit-date'] || '';
-            var startDate = firstRow['settlement-start-date'] || report.dataStartTime || '';
-            var endDate = firstRow['settlement-end-date'] || report.dataEndTime || '';
             var currency = firstRow['currency'] || '';
 
             // Update summary with settlement-level metadata
@@ -162,12 +167,11 @@ define([
                 });
             }
 
-            // Guard against empty reports - if no rows, mark settlement as PENDING with zero totals
-            // to avoid leaving it stuck in PROCESSING status indefinitely
+            // Guard against empty reports
             if (parsed.rows.length === 0 && existingLineIds.length === 0) {
                 logger.warn(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                    'Settlement Line MR map: Report ' + report.reportId +
-                    ' has 0 data rows and no existing lines. Setting summary ' + summaryId + ' to PENDING with zero totals.');
+                    'Settlement Line MR map: Report ' + reportId +
+                    ' has 0 data rows. Setting settlement ' + summaryId + ' to PENDING with zero totals.');
                 record.submitFields({
                     type: STL.ID,
                     id: summaryId,
@@ -183,8 +187,7 @@ define([
                 return;
             }
 
-            // Emit each row individually so reduce creates records within governance limits.
-            // Key format: summaryId|lineIndex ensures each row gets its own reduce invocation.
+            // Emit each row individually so reduce creates records within governance limits
             for (var i = 0; i < parsed.rows.length; i++) {
                 context.write({
                     key: summaryId + '|' + i,
@@ -192,40 +195,40 @@ define([
                         action: 'create',
                         configId: configId,
                         summaryId: summaryId,
-                        reportId: report.reportId,
-                        endDate: endDate || report.dataEndTime,
+                        reportId: reportId,
+                        endDate: endDate,
                         row: parsed.rows[i]
                     })
                 });
             }
 
             logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                'Settlement Line MR map: Processing report ' + report.reportId +
-                ' [configId=' + configId +
-                ', reportDocId=' + report.reportDocumentId +
-                ', rowCount=' + parsed.rows.length +
-                ', existingSettlement=' + (existingId || 'none') +
-                ', existingLinesToDelete=' + existingLineIds.length +
-                ', currency=' + (currency || 'N/A') +
-                ', depositDate=' + (depositDate || 'N/A') +
-                ', settlementTotal=' + (settlementTotal || 'N/A') + ']');
-
-            logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
                 'Settlement Line MR map: Emitted ' + existingLineIds.length + ' delete(s) + ' +
                 parsed.rows.length + ' create(s) for reduce. Report ' +
-                report.reportId + ', summary ' + summaryId);
+                reportId + ', settlement ' + summaryId);
 
         } catch (e) {
             logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                'Settlement Line MR map error for report ' + (report && report.reportId || 'unknown') +
+                'Settlement Line MR map error for report ' + reportId +
                 ': ' + e.message, { details: e.stack });
+
+            // Try to set error status on the settlement record
+            if (summaryId) {
+                try {
+                    record.submitFields({
+                        type: STL.ID,
+                        id: summaryId,
+                        values: { [STL.FIELDS.STATUS]: constants.SETTLEMENT_STATUS.ERROR }
+                    });
+                } catch (ignore) { }
+            }
 
             errorQueue.enqueue({
                 type: constants.ERROR_QUEUE_TYPE.SETTLEMENT_PROCESS,
-                amazonRef: (report && report.reportId) || 'unknown',
+                amazonRef: reportId,
                 errorMsg: 'Map stage error: ' + e.message,
-                configId: (report && report._configId) || '',
-                payload: JSON.stringify({ reportId: (report && report.reportId) || 'unknown' })
+                configId: '',
+                payload: JSON.stringify({ summaryId: summaryId || '', reportId: reportId })
             });
         }
     }
@@ -432,42 +435,42 @@ define([
      * - Settlement Total = SUM(all amounts)
      */
     function recalcSummaryTotals(summaryId) {
+        var colGroup = search.createColumn({ name: SL.FIELDS.SUMMARY, summary: search.Summary.GROUP });
+        // Total Payments: Orders from Amazon marketplace
+        var colPayments = search.createColumn({
+            name: 'formulanumeric',
+            summary: search.Summary.SUM,
+            formula: "CASE WHEN ({" + SL.FIELDS.TRAN_TYPE + "} = 'Order' AND {" + SL.FIELDS.MARKETPLACE + "} != 'Non-Amazon') THEN {" + SL.FIELDS.AMOUNT + "} ELSE 0 END"
+        });
+        // Total Refunds
+        var colRefunds = search.createColumn({
+            name: 'formulanumeric',
+            summary: search.Summary.SUM,
+            formula: "CASE WHEN {" + SL.FIELDS.TRAN_TYPE + "} = 'Refund' THEN {" + SL.FIELDS.AMOUNT + "} ELSE 0 END"
+        });
+        // Total Other Charges (not Order, not Refund, not Previous Reserve, and not Non-Amazon for Order/Refund)
+        var colOther = search.createColumn({
+            name: 'formulanumeric',
+            summary: search.Summary.SUM,
+            formula: "CASE WHEN (({" + SL.FIELDS.TRAN_TYPE + "} = 'Refund' OR {" + SL.FIELDS.TRAN_TYPE + "} = 'Order' OR {" + SL.FIELDS.AMOUNT_DESC + "} = 'Previous Reserve Amount Balance') AND {" + SL.FIELDS.MARKETPLACE + "} != 'Non-Amazon') THEN 0 ELSE {" + SL.FIELDS.AMOUNT + "} END"
+        });
+        // Settlement Total (all amounts)
+        var colTotal = search.createColumn({
+            name: SL.FIELDS.AMOUNT,
+            summary: search.Summary.SUM
+        });
+        // Line count
+        var colCount = search.createColumn({
+            name: 'internalid',
+            summary: search.Summary.COUNT
+        });
+
         var lineSearch = search.create({
             type: SL.ID,
             filters: [
                 [SL.FIELDS.SUMMARY, 'anyof', summaryId]
             ],
-            columns: [
-                search.createColumn({ name: SL.FIELDS.SUMMARY, summary: search.Summary.GROUP }),
-                // Total Payments: Orders from Amazon marketplace
-                search.createColumn({
-                    name: 'formulanumeric',
-                    summary: search.Summary.SUM,
-                    formula: "CASE WHEN ({" + SL.FIELDS.TRAN_TYPE + "} = 'Order' AND {" + SL.FIELDS.MARKETPLACE + "} != 'Non-Amazon') THEN {" + SL.FIELDS.AMOUNT + "} ELSE 0 END"
-                }),
-                // Total Refunds
-                search.createColumn({
-                    name: 'formulanumeric',
-                    summary: search.Summary.SUM,
-                    formula: "CASE WHEN {" + SL.FIELDS.TRAN_TYPE + "} = 'Refund' THEN {" + SL.FIELDS.AMOUNT + "} ELSE 0 END"
-                }),
-                // Total Other Charges (not Order, not Refund, not Previous Reserve, and not Non-Amazon for Order/Refund)
-                search.createColumn({
-                    name: 'formulanumeric',
-                    summary: search.Summary.SUM,
-                    formula: "CASE WHEN (({" + SL.FIELDS.TRAN_TYPE + "} = 'Refund' OR {" + SL.FIELDS.TRAN_TYPE + "} = 'Order' OR {" + SL.FIELDS.AMOUNT_DESC + "} = 'Previous Reserve Amount Balance') AND {" + SL.FIELDS.MARKETPLACE + "} != 'Non-Amazon') THEN 0 ELSE {" + SL.FIELDS.AMOUNT + "} END"
-                }),
-                // Settlement Total (all amounts)
-                search.createColumn({
-                    name: SL.FIELDS.AMOUNT,
-                    summary: search.Summary.SUM
-                }),
-                // Line count
-                search.createColumn({
-                    name: 'internalid',
-                    summary: search.Summary.COUNT
-                })
-            ]
+            columns: [colGroup, colPayments, colRefunds, colOther, colTotal, colCount]
         });
 
         var results = lineSearch.run().getRange({ start: 0, end: 1 });
@@ -476,13 +479,12 @@ define([
             return { totalPayments: 0, totalRefunds: 0, totalOtherCharges: 0, settlementTotal: 0, lineCount: 0 };
         }
 
-        var columns = results[0].getAllColumns();
         return {
-            totalPayments: parseFloat(results[0].getValue(columns[1])) || 0,
-            totalRefunds: parseFloat(results[0].getValue(columns[2])) || 0,
-            totalOtherCharges: parseFloat(results[0].getValue(columns[3])) || 0,
-            settlementTotal: parseFloat(results[0].getValue(columns[4])) || 0,
-            lineCount: parseInt(results[0].getValue(columns[5]), 10) || 0
+            totalPayments: parseFloat(results[0].getValue(colPayments)) || 0,
+            totalRefunds: parseFloat(results[0].getValue(colRefunds)) || 0,
+            totalOtherCharges: parseFloat(results[0].getValue(colOther)) || 0,
+            settlementTotal: parseFloat(results[0].getValue(colTotal)) || 0,
+            lineCount: parseInt(results[0].getValue(colCount), 10) || 0
         };
     }
 
