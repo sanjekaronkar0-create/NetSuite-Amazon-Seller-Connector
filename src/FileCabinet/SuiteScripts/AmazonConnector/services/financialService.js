@@ -333,7 +333,8 @@ define([
                 continue;
             }
 
-            // Deduplication: check if line already exists via custcol_celigo_etail_order_line_id
+            // Check if line already exists via custcol_celigo_etail_order_line_id
+            // Old process: update existing line's qty/amount; add new line if not found
             if (orderLineId) {
                 var existingLine = inv.findSublistLineWithValue({
                     sublistId: 'item',
@@ -341,11 +342,16 @@ define([
                     value: orderLineId
                 });
                 if (existingLine !== -1) {
+                    inv.selectLine({ sublistId: 'item', line: existingLine });
+                    inv.setCurrentSublistValue({ sublistId: 'item', fieldId: 'quantity', value: 1 });
+                    inv.setCurrentSublistValue({ sublistId: 'item', fieldId: 'amount', value: amount });
+                    inv.commitLine({ sublistId: 'item' });
+                    linesAdded++;
                     continue;
                 }
             }
 
-            // Add line
+            // Add new line
             inv.selectNewLine({ sublistId: 'item' });
             inv.setCurrentSublistValue({ sublistId: 'item', fieldId: 'item', value: itemId });
             inv.setCurrentSublistValue({ sublistId: 'item', fieldId: 'description', value: desc });
