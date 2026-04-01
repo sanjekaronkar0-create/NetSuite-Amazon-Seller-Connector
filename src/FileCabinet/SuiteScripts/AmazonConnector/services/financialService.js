@@ -412,9 +412,6 @@ define([
             cm.setValue({ fieldId: 'entity', value: config.customer });
         }
 
-        var currencyId = resolveCurrencyId(marketplace);
-        cm.setValue({ fieldId: 'currency', value: currencyId });
-
         if (config.location) {
             cm.setValue({ fieldId: 'location', value: config.location });
         }
