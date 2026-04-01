@@ -801,7 +801,8 @@ define([
                 quantity: result.getValue(SL.FIELDS.QUANTITY),
                 postDate: result.getValue(SL.FIELDS.POST_DATE),
                 postDateNs: result.getValue(SL.FIELDS.POST_DATE_NS),
-                promoId: result.getValue(SL.FIELDS.PROMO_ID)
+                promoId: result.getValue(SL.FIELDS.PROMO_ID),
+                orderLineId: result.id  // Use settlement line internal ID for invoice line deduplication
             });
             return true;
         });
