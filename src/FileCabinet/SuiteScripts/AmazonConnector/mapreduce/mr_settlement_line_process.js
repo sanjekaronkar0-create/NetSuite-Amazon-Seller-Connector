@@ -432,42 +432,42 @@ define([
      * - Settlement Total = SUM(all amounts)
      */
     function recalcSummaryTotals(summaryId) {
+        var colGroup = search.createColumn({ name: SL.FIELDS.SUMMARY, summary: search.Summary.GROUP });
+        // Total Payments: Orders from Amazon marketplace
+        var colPayments = search.createColumn({
+            name: 'formulanumeric',
+            summary: search.Summary.SUM,
+            formula: "CASE WHEN ({" + SL.FIELDS.TRAN_TYPE + "} = 'Order' AND {" + SL.FIELDS.MARKETPLACE + "} != 'Non-Amazon') THEN {" + SL.FIELDS.AMOUNT + "} ELSE 0 END"
+        });
+        // Total Refunds
+        var colRefunds = search.createColumn({
+            name: 'formulanumeric',
+            summary: search.Summary.SUM,
+            formula: "CASE WHEN {" + SL.FIELDS.TRAN_TYPE + "} = 'Refund' THEN {" + SL.FIELDS.AMOUNT + "} ELSE 0 END"
+        });
+        // Total Other Charges (not Order, not Refund, not Previous Reserve, and not Non-Amazon for Order/Refund)
+        var colOther = search.createColumn({
+            name: 'formulanumeric',
+            summary: search.Summary.SUM,
+            formula: "CASE WHEN (({" + SL.FIELDS.TRAN_TYPE + "} = 'Refund' OR {" + SL.FIELDS.TRAN_TYPE + "} = 'Order' OR {" + SL.FIELDS.AMOUNT_DESC + "} = 'Previous Reserve Amount Balance') AND {" + SL.FIELDS.MARKETPLACE + "} != 'Non-Amazon') THEN 0 ELSE {" + SL.FIELDS.AMOUNT + "} END"
+        });
+        // Settlement Total (all amounts)
+        var colTotal = search.createColumn({
+            name: SL.FIELDS.AMOUNT,
+            summary: search.Summary.SUM
+        });
+        // Line count
+        var colCount = search.createColumn({
+            name: 'internalid',
+            summary: search.Summary.COUNT
+        });
+
         var lineSearch = search.create({
             type: SL.ID,
             filters: [
                 [SL.FIELDS.SUMMARY, 'anyof', summaryId]
             ],
-            columns: [
-                search.createColumn({ name: SL.FIELDS.SUMMARY, summary: search.Summary.GROUP }),
-                // Total Payments: Orders from Amazon marketplace
-                search.createColumn({
-                    name: 'formulanumeric',
-                    summary: search.Summary.SUM,
-                    formula: "CASE WHEN ({" + SL.FIELDS.TRAN_TYPE + "} = 'Order' AND {" + SL.FIELDS.MARKETPLACE + "} != 'Non-Amazon') THEN {" + SL.FIELDS.AMOUNT + "} ELSE 0 END"
-                }),
-                // Total Refunds
-                search.createColumn({
-                    name: 'formulanumeric',
-                    summary: search.Summary.SUM,
-                    formula: "CASE WHEN {" + SL.FIELDS.TRAN_TYPE + "} = 'Refund' THEN {" + SL.FIELDS.AMOUNT + "} ELSE 0 END"
-                }),
-                // Total Other Charges (not Order, not Refund, not Previous Reserve, and not Non-Amazon for Order/Refund)
-                search.createColumn({
-                    name: 'formulanumeric',
-                    summary: search.Summary.SUM,
-                    formula: "CASE WHEN (({" + SL.FIELDS.TRAN_TYPE + "} = 'Refund' OR {" + SL.FIELDS.TRAN_TYPE + "} = 'Order' OR {" + SL.FIELDS.AMOUNT_DESC + "} = 'Previous Reserve Amount Balance') AND {" + SL.FIELDS.MARKETPLACE + "} != 'Non-Amazon') THEN 0 ELSE {" + SL.FIELDS.AMOUNT + "} END"
-                }),
-                // Settlement Total (all amounts)
-                search.createColumn({
-                    name: SL.FIELDS.AMOUNT,
-                    summary: search.Summary.SUM
-                }),
-                // Line count
-                search.createColumn({
-                    name: 'internalid',
-                    summary: search.Summary.COUNT
-                })
-            ]
+            columns: [colGroup, colPayments, colRefunds, colOther, colTotal, colCount]
         });
 
         var results = lineSearch.run().getRange({ start: 0, end: 1 });
@@ -476,13 +476,12 @@ define([
             return { totalPayments: 0, totalRefunds: 0, totalOtherCharges: 0, settlementTotal: 0, lineCount: 0 };
         }
 
-        var columns = results[0].getAllColumns();
         return {
-            totalPayments: parseFloat(results[0].getValue(columns[1])) || 0,
-            totalRefunds: parseFloat(results[0].getValue(columns[2])) || 0,
-            totalOtherCharges: parseFloat(results[0].getValue(columns[3])) || 0,
-            settlementTotal: parseFloat(results[0].getValue(columns[4])) || 0,
-            lineCount: parseInt(results[0].getValue(columns[5]), 10) || 0
+            totalPayments: parseFloat(results[0].getValue(colPayments)) || 0,
+            totalRefunds: parseFloat(results[0].getValue(colRefunds)) || 0,
+            totalOtherCharges: parseFloat(results[0].getValue(colOther)) || 0,
+            settlementTotal: parseFloat(results[0].getValue(colTotal)) || 0,
+            lineCount: parseInt(results[0].getValue(colCount), 10) || 0
         };
     }
 
