@@ -407,11 +407,11 @@ define([
 
                 var invoiceId, paymentTotal;
                 if (existingInvId) {
-                    invoiceId = existingInvId;
-                    paymentTotal = 0;
-                    for (var i = 0; i < orderLines.length; i++) {
-                        paymentTotal += parseFloat(orderLines[i].amount) || 0;
-                    }
+                    var updateResult = financialService.updateInvoiceLines(
+                        config, existingInvId, orderLines, marketplace, chargeMap
+                    );
+                    invoiceId = updateResult.invoiceId;
+                    paymentTotal = updateResult.paymentTotal;
                 } else {
                     var result2 = financialService.createSettlementInvoice(
                         config, orderId, orderLines, marketplace, chargeMap
