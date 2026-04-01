@@ -4,7 +4,7 @@
  * @NModuleScope SameAccount
  * @description Map/Reduce script for processing Amazon settlements following the old process flow:
  *              Phase A: Create/link order headers per unique order_id
- *              Phase B: Create invoices + customer payments per order
+ *              Phase B: Find existing invoices, add settlement fee lines, create customer payments
  *              Phase C: Create credit memos + customer refunds for refund lines
  *              Phase D: Create JEs for other charges grouped by month
  */
@@ -240,7 +240,7 @@ define([
     function phaseA_createOrderHeaders(config, settlementId) {
         var headers = {};
 
-        // Search all unprocessed lines for this settlement
+        // Search all unprocessed lines for this settlement using runPaged to handle >4000 results
         var lineSearch = search.create({
             type: SL.ID,
             filters: [
@@ -255,25 +255,26 @@ define([
             ]
         });
 
-        lineSearch.run().each(function (result) {
-            var orderId = result.getValue(SL.FIELDS.ORDER_ID) || '';
-            if (!orderId) return true;
+        var pagedData = lineSearch.runPaged({ pageSize: 1000 });
+        pagedData.pageRanges.forEach(function (pageRange) {
+            pagedData.fetch({ index: pageRange.index }).data.forEach(function (result) {
+                var orderId = result.getValue(SL.FIELDS.ORDER_ID) || '';
+                if (!orderId) return;
 
-            var marketplace = result.getValue(SL.FIELDS.MARKETPLACE) || '';
-            var tranType = result.getValue(SL.FIELDS.TRAN_TYPE) || '';
+                var marketplace = result.getValue(SL.FIELDS.MARKETPLACE) || '';
+                var tranType = result.getValue(SL.FIELDS.TRAN_TYPE) || '';
 
-            if (!headers[orderId]) {
-                headers[orderId] = {
-                    headerId: null,
-                    marketplace: marketplace,
-                    hasOrders: false,
-                    hasRefunds: false
-                };
-            }
-            if (tranType === 'Order') headers[orderId].hasOrders = true;
-            if (tranType === 'Refund') headers[orderId].hasRefunds = true;
-
-            return true;
+                if (!headers[orderId]) {
+                    headers[orderId] = {
+                        headerId: null,
+                        marketplace: marketplace,
+                        hasOrders: false,
+                        hasRefunds: false
+                    };
+                }
+                if (tranType === 'Order') headers[orderId].hasOrders = true;
+                if (tranType === 'Refund') headers[orderId].hasRefunds = true;
+            });
         });
 
         // Batch-search for existing headers for this settlement to avoid per-order searches
@@ -380,7 +381,6 @@ define([
                 }
 
                 // Resolve marketplace-specific config (customer, location, subsidiary, etc.)
-                // Old process used different customers per marketplace (e.g. Amazon.ca → customer 6533613)
                 var effectiveConfig = configHelper.resolveMarketplaceSettingsByName(config, marketplace);
 
                 // Get settlement lines for this order
@@ -393,7 +393,7 @@ define([
                     return true;
                 }
 
-                // Check for existing invoice
+                // --- Old process: find EXISTING invoice, never create from settlement ---
                 var existingInvId = null;
                 try {
                     var invLookup = search.lookupFields({
@@ -407,24 +407,35 @@ define([
 
                 if (!existingInvId) {
                     existingInvId = financialService.lookupInvoice(orderId);
+                    if (existingInvId) {
+                        // Link found invoice to the header for future runs
+                        record.submitFields({
+                            type: SH.ID, id: headerId,
+                            values: { [SH.FIELDS.INVOICE_REC]: existingInvId }
+                        });
+                    }
                 }
 
-                var invoiceId, paymentTotal;
-                if (existingInvId) {
-                    var updateResult = financialService.updateInvoiceLines(
-                        effectiveConfig, existingInvId, orderLines, marketplace, chargeMap
-                    );
-                    invoiceId = updateResult.invoiceId;
-                    paymentTotal = updateResult.paymentTotal;
-                } else {
-                    var result2 = financialService.createSettlementInvoice(
-                        effectiveConfig, orderId, orderLines, marketplace, chargeMap
-                    );
-                    invoiceId = result2.invoiceId;
-                    paymentTotal = result2.paymentTotal;
+                // If no invoice exists, skip this order (old process behavior)
+                if (!existingInvId) {
+                    var skipMsg = 'There is no invoice created for this order yet. Settlement can not be updated.';
+                    logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
+                        'Phase B: Skipping order ' + orderId + ': ' + skipMsg);
+                    record.submitFields({
+                        type: SH.ID, id: headerId,
+                        values: { [SH.FIELDS.ERROR]: skipMsg }
+                    });
+                    return true;
                 }
 
-                // Create customer payment
+                // Update existing invoice with settlement fee lines
+                var updateResult = financialService.updateInvoiceLines(
+                    effectiveConfig, existingInvId, orderLines, marketplace, chargeMap
+                );
+                var invoiceId = updateResult.invoiceId;
+                var paymentTotal = updateResult.paymentTotal;
+
+                // Create customer payment (transform invoice → payment, like old process)
                 var paymentId = null;
                 if (invoiceId && paymentTotal != null && paymentTotal !== 0) {
                     var firstLine = orderLines[0] || {};
@@ -458,7 +469,7 @@ define([
 
                 logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
                     'Phase B: Invoice ' + invoiceId + ', Payment ' + (paymentId || 'none') +
-                    ' for order ' + orderId + ', marketplace ' + marketplace);
+                    ' for order ' + orderId);
 
             } catch (e) {
                 logger.error(constants.LOG_TYPE.FINANCIAL_RECON,
@@ -603,6 +614,22 @@ define([
         }
 
         // Search charge lines grouped by marketplace, desc, month
+        // Define columns as variables so we can reference them directly (SuiteScript 2.1 — no getAllColumns)
+        var colMarketplace = search.createColumn({ name: SL.FIELDS.MARKETPLACE, summary: search.Summary.GROUP });
+        var colAmountDesc = search.createColumn({ name: SL.FIELDS.AMOUNT_DESC, summary: search.Summary.GROUP });
+        var colMonth = search.createColumn({
+            name: 'formulatext',
+            summary: search.Summary.GROUP,
+            formula: "TO_CHAR({" + SL.FIELDS.POST_DATE_NS + "}, 'MONTH, YYYY')"
+        });
+        var colMaxDate = search.createColumn({
+            name: SL.FIELDS.POST_DATE_NS,
+            summary: search.Summary.MAX,
+            sort: search.Sort.ASC
+        });
+        var colAmount = search.createColumn({ name: SL.FIELDS.AMOUNT, summary: search.Summary.SUM });
+        var colAmountType = search.createColumn({ name: SL.FIELDS.AMOUNT_TYPE, summary: search.Summary.GROUP });
+
         var chargeSearch = search.create({
             type: SL.ID,
             filters: [
@@ -618,22 +645,7 @@ define([
                 'AND',
                 [SL.FIELDS.AMOUNT, 'notequalto', '0.00']
             ],
-            columns: [
-                search.createColumn({ name: SL.FIELDS.MARKETPLACE, summary: search.Summary.GROUP }),
-                search.createColumn({ name: SL.FIELDS.AMOUNT_DESC, summary: search.Summary.GROUP }),
-                search.createColumn({
-                    name: 'formulatext',
-                    summary: search.Summary.GROUP,
-                    formula: "TO_CHAR({" + SL.FIELDS.POST_DATE_NS + "}, 'MONTH, YYYY')"
-                }),
-                search.createColumn({
-                    name: SL.FIELDS.POST_DATE_NS,
-                    summary: search.Summary.MAX,
-                    sort: search.Sort.ASC
-                }),
-                search.createColumn({ name: SL.FIELDS.AMOUNT, summary: search.Summary.SUM }),
-                search.createColumn({ name: SL.FIELDS.AMOUNT_TYPE, summary: search.Summary.GROUP })
-            ]
+            columns: [colMarketplace, colAmountDesc, colMonth, colMaxDate, colAmount, colAmountType]
         });
 
         var chargeResults = [];
@@ -664,15 +676,14 @@ define([
                     ' units). Saving current JE and stopping.');
                 break;
             }
-            var columns = chargeResults[y].getAllColumns();
-            var amt = parseFloat(chargeResults[y].getValue(columns[4])) || 0;
+            var amt = parseFloat(chargeResults[y].getValue(colAmount)) || 0;
             if (amt === 0) continue;
 
-            var mp = chargeResults[y].getValue(columns[0]);
-            var desc = chargeResults[y].getValue(columns[1]);
-            var month = chargeResults[y].getValue(columns[2]);
-            var maxDate = chargeResults[y].getValue(columns[3]);
-            var amtType = chargeResults[y].getValue(columns[5]);
+            var mp = chargeResults[y].getValue(colMarketplace);
+            var desc = chargeResults[y].getValue(colAmountDesc);
+            var month = chargeResults[y].getValue(colMonth);
+            var maxDate = chargeResults[y].getValue(colMaxDate);
+            var amtType = chargeResults[y].getValue(colAmountType);
 
             // Override desc for specific amount types (like old process)
             if (amtType === 'Cost of Advertising' || amtType === 'CouponRedemptionFee') {
@@ -774,7 +785,7 @@ define([
             [SL.FIELDS.PROCESSED, 'is', 'F']
         ];
 
-        search.create({
+        var lineSearch = search.create({
             type: SL.ID,
             filters: filters,
             columns: [
@@ -793,25 +804,30 @@ define([
                 SL.FIELDS.POST_DATE_NS,
                 SL.FIELDS.PROMO_ID
             ]
-        }).run().each(function (result) {
-            lines.push({
-                id: result.id,
-                settlementId: result.getValue(SL.FIELDS.SETTLEMENT_ID),
-                orderId: result.getValue(SL.FIELDS.ORDER_ID),
-                marketplace: result.getValue(SL.FIELDS.MARKETPLACE),
-                tranType: result.getValue(SL.FIELDS.TRAN_TYPE),
-                amountType: result.getValue(SL.FIELDS.AMOUNT_TYPE),
-                amountDesc: result.getValue(SL.FIELDS.AMOUNT_DESC),
-                amount: result.getValue(SL.FIELDS.AMOUNT),
-                currency: result.getValue(SL.FIELDS.CURRENCY),
-                sku: result.getValue(SL.FIELDS.SKU),
-                quantity: result.getValue(SL.FIELDS.QUANTITY),
-                postDate: result.getValue(SL.FIELDS.POST_DATE),
-                postDateNs: result.getValue(SL.FIELDS.POST_DATE_NS),
-                promoId: result.getValue(SL.FIELDS.PROMO_ID),
-                orderLineId: result.id  // Use settlement line internal ID for invoice line deduplication
+        });
+
+        // Use runPaged to handle >4000 results per order
+        var pagedLines = lineSearch.runPaged({ pageSize: 1000 });
+        pagedLines.pageRanges.forEach(function (pageRange) {
+            pagedLines.fetch({ index: pageRange.index }).data.forEach(function (result) {
+                lines.push({
+                    id: result.id,
+                    settlementId: result.getValue(SL.FIELDS.SETTLEMENT_ID),
+                    orderId: result.getValue(SL.FIELDS.ORDER_ID),
+                    marketplace: result.getValue(SL.FIELDS.MARKETPLACE),
+                    tranType: result.getValue(SL.FIELDS.TRAN_TYPE),
+                    amountType: result.getValue(SL.FIELDS.AMOUNT_TYPE),
+                    amountDesc: result.getValue(SL.FIELDS.AMOUNT_DESC),
+                    amount: result.getValue(SL.FIELDS.AMOUNT),
+                    currency: result.getValue(SL.FIELDS.CURRENCY),
+                    sku: result.getValue(SL.FIELDS.SKU),
+                    quantity: result.getValue(SL.FIELDS.QUANTITY),
+                    postDate: result.getValue(SL.FIELDS.POST_DATE),
+                    postDateNs: result.getValue(SL.FIELDS.POST_DATE_NS),
+                    promoId: result.getValue(SL.FIELDS.PROMO_ID),
+                    orderLineId: result.id  // Use settlement line internal ID for invoice line deduplication
+                });
             });
-            return true;
         });
 
         return lines;
