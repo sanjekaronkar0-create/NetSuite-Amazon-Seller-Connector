@@ -7,14 +7,14 @@
 define([
     'N/task',
     'N/runtime',
+    'N/record',
     'N/log',
     '../lib/constants',
     '../lib/configHelper',
     '../lib/logger',
-    '../lib/mrDataHelper',
     '../services/settlementService',
     '../services/notificationService'
-], function (task, runtime, log, constants, configHelper, logger, mrDataHelper, settlementService, notificationService) {
+], function (task, runtime, record, log, constants, configHelper, logger, settlementService, notificationService) {
 
     const CR = constants.CUSTOM_RECORDS.CONFIG;
 
@@ -75,35 +75,88 @@ define([
 
                     log.audit({
                         title: 'Settlement Sync',
-                        details: 'Found ' + readyReports.length + ' reports. Triggering Map/Reduce processing.'
+                        details: 'Found ' + readyReports.length + ' reports. Creating settlement records.'
                     });
 
-                    // Write settlement data to File Cabinet (script params are too small for JSON)
-                    var fileId = mrDataHelper.writeDataFile({
-                        configId: config.configId,
-                        reports: readyReports
-                    }, 'settlements');
+                    var STL = constants.CUSTOM_RECORDS.SETTLEMENT;
 
-                    // Delegate bulk processing to Map/Reduce (settlement line process)
-                    var mrTask = task.create({
-                        taskType: task.TaskType.MAP_REDUCE,
-                        scriptId: constants.SCRIPT_IDS.MR_SETTLE_LINE,
-                        deploymentId: constants.DEPLOY_IDS.MR_SETTLE_LINE,
-                        params: {
-                            custscript_amz_mr_stl_line_data: String(fileId)
+                    // Create settlement custom records directly with AWAITING_LINES status
+                    var createdCount = 0;
+                    for (var j = 0; j < readyReports.length; j++) {
+                        var rpt = readyReports[j];
+                        try {
+                            // Check if settlement record already exists
+                            var existingId = settlementService.findExistingSettlement(rpt.reportId);
+                            if (existingId) {
+                                // Update existing record with report doc ID and reset status
+                                record.submitFields({
+                                    type: STL.ID,
+                                    id: existingId,
+                                    values: {
+                                        [STL.FIELDS.REPORT_DOC_ID]: rpt.reportDocumentId || '',
+                                        [STL.FIELDS.STATUS]: constants.SETTLEMENT_STATUS.AWAITING_LINES,
+                                        [STL.FIELDS.CONFIG]: config.configId
+                                    }
+                                });
+                                logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                                    'Settlement Sync: Updated existing settlement record ' + existingId +
+                                    ' for report ' + rpt.reportId + ' to AWAITING_LINES');
+                            } else {
+                                var rec = record.create({ type: STL.ID });
+                                rec.setValue({ fieldId: 'name', value: 'Settlement: ' + (rpt.reportId || 'Unknown') });
+                                rec.setValue({ fieldId: STL.FIELDS.REPORT_ID, value: rpt.reportId });
+                                rec.setValue({ fieldId: STL.FIELDS.REPORT_DOC_ID, value: rpt.reportDocumentId || '' });
+                                rec.setValue({ fieldId: STL.FIELDS.STATUS, value: constants.SETTLEMENT_STATUS.AWAITING_LINES });
+                                rec.setValue({ fieldId: STL.FIELDS.CONFIG, value: config.configId });
+                                if (rpt.dataStartTime) {
+                                    rec.setValue({ fieldId: STL.FIELDS.START_DATE, value: new Date(rpt.dataStartTime) });
+                                }
+                                if (rpt.dataEndTime) {
+                                    rec.setValue({ fieldId: STL.FIELDS.END_DATE, value: new Date(rpt.dataEndTime) });
+                                }
+                                var savedId = rec.save({ ignoreMandatoryFields: true });
+                                logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                                    'Settlement Sync: Created settlement record ' + savedId +
+                                    ' for report ' + rpt.reportId + ' with status AWAITING_LINES');
+                            }
+                            createdCount++;
+                        } catch (recErr) {
+                            logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                                'Settlement Sync: Error creating record for report ' + rpt.reportId +
+                                ': ' + recErr.message);
                         }
-                    });
+                    }
 
-                    var taskId = mrDataHelper.submitMrTask(mrTask, constants.LOG_TYPE.SETTLEMENT_SYNC, logger);
-                    if (!taskId) {
-                        mrDataHelper.deleteTempFile(fileId);
-                        continue;
+                    // Trigger the Line Processing M/R (it will search for AWAITING_LINES records)
+                    if (createdCount > 0) {
+                        try {
+                            var mrTask = task.create({
+                                taskType: task.TaskType.MAP_REDUCE,
+                                scriptId: constants.SCRIPT_IDS.MR_SETTLE_LINE,
+                                deploymentId: constants.DEPLOY_IDS.MR_SETTLE_LINE
+                            });
+                            var taskId = mrTask.submit();
+                            logger.success(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                                'Settlement Map/Reduce triggered. Task ID: ' + taskId, {
+                                configId: config.configId,
+                                details: 'Reports: ' + createdCount
+                            });
+                        } catch (mrErr) {
+                            if (mrErr.name === 'MAP_REDUCE_ALREADY_RUNNING' ||
+                                (mrErr.message && mrErr.message.indexOf('already running') !== -1)) {
+                                logger.warn(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                                    'Settlement M/R already running. Records are saved with AWAITING_LINES status ' +
+                                    'and will be picked up on next run.');
+                            } else {
+                                throw mrErr;
+                            }
+                        }
                     }
 
                     logger.success(constants.LOG_TYPE.SETTLEMENT_SYNC,
-                        'Settlement Map/Reduce triggered. Task ID: ' + taskId, {
+                        'Settlement sync: Created ' + createdCount + ' settlement record(s) for config ' + config.configId, {
                         configId: config.configId,
-                        details: 'Reports: ' + readyReports.length
+                        details: 'Reports: ' + createdCount
                     });
 
                     configHelper.updateLastSync(config.configId, CR.FIELDS.LAST_SETTLE_SYNC);

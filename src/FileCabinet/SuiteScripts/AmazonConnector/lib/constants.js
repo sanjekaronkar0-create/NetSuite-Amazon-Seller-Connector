@@ -179,7 +179,8 @@ define([], function () {
                 TOTAL_OTHER: 'custrecord_amz_stl_total_other',
                 RECALC: 'custrecord_amz_stl_recalc',
                 NO_JE: 'custrecord_amz_stl_no_je',
-                DEPOSIT_DATE: 'custrecord_amz_stl_deposit_date'
+                DEPOSIT_DATE: 'custrecord_amz_stl_deposit_date',
+                REPORT_DOC_ID: 'custrecord_amz_stl_report_doc_id'
             }
         },
         SETTLEMENT_LINE: {
@@ -342,7 +343,8 @@ define([], function () {
         PENDING: '1',
         PROCESSING: '2',
         RECONCILED: '3',
-        ERROR: '4'
+        ERROR: '4',
+        AWAITING_LINES: '5'
     };
 
     const RETURN_STATUS = {
