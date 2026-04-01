@@ -13,12 +13,13 @@ define([
     'N/search',
     'N/format',
     'N/log',
+    'N/runtime',
     '../lib/constants',
     '../lib/configHelper',
     '../lib/errorQueue',
     '../lib/logger',
     '../services/financialService'
-], function (record, search, format, log, constants, configHelper, errorQueue, logger,
+], function (record, search, format, log, runtime, constants, configHelper, errorQueue, logger,
     financialService) {
 
     const STL = constants.CUSTOM_RECORDS.SETTLEMENT;
@@ -71,7 +72,11 @@ define([
                 return;
             }
             var configId = result.values ? result.values[STL.FIELDS.CONFIG] : null;
-            if (configId && typeof configId === 'object') configId = configId.value || configId;
+            if (configId && Array.isArray(configId) && configId.length > 0) {
+                configId = configId[0].value || configId[0];
+            } else if (configId && typeof configId === 'object') {
+                configId = configId.value || configId;
+            }
 
             logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
                 'Settlement Process MR map: Processing settlement ' + settlementId);
@@ -119,7 +124,15 @@ define([
                 'Settlement Process MR reduce: Starting for settlement ' + settlementId +
                 ', report ' + reportId + ', config ' + configId);
 
+            if (!configId) {
+                throw new Error('Missing configId for settlement ' + settlementId +
+                    '. Ensure the settlement record has a valid config reference.');
+            }
+
             var config = configHelper.getConfig(configId);
+            if (!config) {
+                throw new Error('Config record not found for configId ' + configId);
+            }
             var chargeMap = configHelper.getChargeAccountMap(configId, resolveCurrencyId(data.currency));
 
             // ================================================================
@@ -263,25 +276,41 @@ define([
             return true;
         });
 
+        // Batch-search for existing headers for this settlement to avoid per-order searches
+        var existingHeaders = {};
+        try {
+            search.create({
+                type: SH.ID,
+                filters: [[SH.FIELDS.SUMMARY, 'anyof', settlementId]],
+                columns: ['internalid', SH.FIELDS.ORDER_ID]
+            }).run().each(function (r) {
+                var oid = r.getValue(SH.FIELDS.ORDER_ID);
+                if (oid) existingHeaders[oid] = r.id;
+                return true;
+            });
+        } catch (e) {
+            logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
+                'Phase A: Could not batch-search existing headers: ' + e.message);
+        }
+
         // Create or find header record for each order
+        var script = runtime.getCurrentScript();
         for (var orderId in headers) {
             if (!headers.hasOwnProperty(orderId)) continue;
             var info = headers[orderId];
 
-            try {
-                // Search for existing header
-                var existing = search.create({
-                    type: SH.ID,
-                    filters: [
-                        [SH.FIELDS.ORDER_ID, 'is', orderId],
-                        'AND',
-                        [SH.FIELDS.SUMMARY, 'anyof', settlementId]
-                    ],
-                    columns: ['internalid']
-                }).run().getRange({ start: 0, end: 1 });
+            // Check governance before each order to avoid usage limit exceeded
+            if (script.getRemainingUsage() < 100) {
+                logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
+                    'Phase A: Low governance (' + script.getRemainingUsage() +
+                    ' units remaining). Skipping remaining ' +
+                    'order headers to preserve usage for Phases B-D.');
+                break;
+            }
 
-                if (existing && existing.length > 0) {
-                    info.headerId = existing[0].id;
+            try {
+                if (existingHeaders[orderId]) {
+                    info.headerId = existingHeaders[orderId];
                 } else {
                     var rec = record.create({ type: SH.ID });
                     rec.setValue({ fieldId: SH.FIELDS.ORDER_ID, value: orderId });
@@ -328,7 +357,14 @@ define([
             columns: [SH.FIELDS.ORDER_ID, SH.FIELDS.MARKETPLACE, SH.FIELDS.INVOICE_REC]
         });
 
+        var scriptB = runtime.getCurrentScript();
         headerSearch.run().each(function (result) {
+            if (scriptB.getRemainingUsage() < 200) {
+                logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
+                    'Phase B: Low governance (' + scriptB.getRemainingUsage() +
+                    ' units). Stopping invoice/payment creation for remaining orders.');
+                return false;
+            }
             var headerId = result.id;
             var orderId = result.getValue(SH.FIELDS.ORDER_ID);
             var marketplace = result.getValue(SH.FIELDS.MARKETPLACE) || '';
@@ -454,7 +490,14 @@ define([
             columns: [SH.FIELDS.ORDER_ID, SH.FIELDS.MARKETPLACE]
         });
 
+        var scriptC = runtime.getCurrentScript();
         headerSearch.run().each(function (result) {
+            if (scriptC.getRemainingUsage() < 200) {
+                logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
+                    'Phase C: Low governance (' + scriptC.getRemainingUsage() +
+                    ' units). Stopping credit memo/refund creation for remaining orders.');
+                return false;
+            }
             var headerId = result.id;
             var orderId = result.getValue(SH.FIELDS.ORDER_ID);
             var marketplace = result.getValue(SH.FIELDS.MARKETPLACE) || '';
@@ -606,7 +649,14 @@ define([
         var currentTotal = 0;
         var prevMonth = '';
 
+        var scriptD = runtime.getCurrentScript();
         for (var y = 0; y < chargeResults.length; y++) {
+            if (scriptD.getRemainingUsage() < 150) {
+                logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
+                    'Phase D: Low governance (' + scriptD.getRemainingUsage() +
+                    ' units). Saving current JE and stopping.');
+                break;
+            }
             var columns = chargeResults[y].getAllColumns();
             var amt = parseFloat(chargeResults[y].getValue(columns[4])) || 0;
             if (amt === 0) continue;
@@ -763,7 +813,13 @@ define([
      * Marks an array of settlement lines as processed.
      */
     function markLinesProcessed(lines) {
+        var script = runtime.getCurrentScript();
         for (var i = 0; i < lines.length; i++) {
+            if (script.getRemainingUsage() < 50) {
+                logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
+                    'markLinesProcessed: Low governance, marked ' + i + ' of ' + lines.length + ' lines.');
+                break;
+            }
             try {
                 record.submitFields({
                     type: SL.ID,
