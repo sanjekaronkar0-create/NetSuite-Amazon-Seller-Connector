@@ -505,6 +505,125 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
         return { map: chargeMap, defaultAccount: defaultAccount };
     }
 
+    /**
+     * Maps Amazon settlement marketplace names (e.g. 'Amazon.ca') to common short names
+     * that may be used in marketplace config records (e.g. 'CA').
+     * Also maps Amazon Marketplace IDs to names for cross-reference.
+     */
+    var MARKETPLACE_NAME_MAP = {
+        'amazon.com': ['us', 'usa', 'united states'],
+        'amazon.ca': ['ca', 'canada'],
+        'amazon.com.mx': ['mx', 'mexico'],
+        'amazon.co.uk': ['uk', 'united kingdom', 'gb'],
+        'amazon.de': ['de', 'germany'],
+        'amazon.fr': ['fr', 'france'],
+        'amazon.it': ['it', 'italy'],
+        'amazon.es': ['es', 'spain'],
+        'amazon.co.jp': ['jp', 'japan'],
+        'amazon.com.au': ['au', 'australia'],
+        'amazon.in': ['in', 'india'],
+        'amazon.com.br': ['br', 'brazil'],
+        'amazon.sg': ['sg', 'singapore'],
+        'amazon.nl': ['nl', 'netherlands'],
+        'amazon.sa': ['sa', 'saudi arabia', 'ksa'],
+        'amazon.ae': ['ae', 'uae', 'united arab emirates'],
+        'amazon.pl': ['pl', 'poland'],
+        'amazon.se': ['se', 'sweden'],
+        'amazon.com.tr': ['tr', 'turkey'],
+        'amazon.eg': ['eg', 'egypt']
+    };
+
+    /**
+     * Resolves effective config values by marketplace name (e.g. 'Amazon.ca').
+     * Used by settlement processing where only the marketplace name is available
+     * (unlike order import which has a marketplace ID).
+     *
+     * Matching strategy (in order):
+     *  1. Exact match on marketplaceName
+     *  2. Case-insensitive match on marketplaceName
+     *  3. Cross-format match: Amazon name ('Amazon.ca') ↔ short name ('CA')
+     *
+     * @param {Object} config - Base connector config
+     * @param {string} marketplaceName - Marketplace name from settlement data
+     * @returns {Object} Merged config with marketplace overrides applied
+     */
+    function resolveMarketplaceSettingsByName(config, marketplaceName) {
+        if (!marketplaceName) return config;
+
+        var mktConfigs = getMarketplaceConfigs(config.configId);
+        var mktCfg = null;
+        var inputLower = marketplaceName.toLowerCase().trim();
+
+        // Pass 1: exact match
+        for (var i = 0; i < mktConfigs.length; i++) {
+            if (mktConfigs[i].marketplaceName === marketplaceName) {
+                mktCfg = mktConfigs[i];
+                break;
+            }
+        }
+
+        // Pass 2: case-insensitive match
+        if (!mktCfg) {
+            for (var j = 0; j < mktConfigs.length; j++) {
+                if ((mktConfigs[j].marketplaceName || '').toLowerCase().trim() === inputLower) {
+                    mktCfg = mktConfigs[j];
+                    break;
+                }
+            }
+        }
+
+        // Pass 3: cross-format match (Amazon name ↔ short name)
+        if (!mktCfg) {
+            for (var k = 0; k < mktConfigs.length; k++) {
+                var cfgNameLower = (mktConfigs[k].marketplaceName || '').toLowerCase().trim();
+
+                // Input is Amazon format (e.g. 'amazon.ca'), config has short name (e.g. 'CA')
+                var aliases = MARKETPLACE_NAME_MAP[inputLower];
+                if (aliases && aliases.indexOf(cfgNameLower) !== -1) {
+                    mktCfg = mktConfigs[k];
+                    break;
+                }
+
+                // Input is short name (e.g. 'CA'), config has Amazon format (e.g. 'Amazon.ca')
+                var cfgAliases = MARKETPLACE_NAME_MAP[cfgNameLower];
+                if (cfgAliases && cfgAliases.indexOf(inputLower) !== -1) {
+                    mktCfg = mktConfigs[k];
+                    break;
+                }
+            }
+        }
+
+        if (!mktCfg) {
+            log.debug({
+                title: 'resolveMarketplaceSettingsByName',
+                details: 'No marketplace config found for "' + marketplaceName +
+                    '" (configId=' + config.configId + '). Using base config.'
+            });
+            return config;
+        }
+
+        var resolved = {};
+        for (var key in config) {
+            if (config.hasOwnProperty(key)) {
+                resolved[key] = config[key];
+            }
+        }
+
+        if (mktCfg.customer) resolved.customer = mktCfg.customer;
+        if (mktCfg.fbaCustomer) resolved.fbaCustomer = mktCfg.fbaCustomer;
+        if (mktCfg.b2bCustomer) resolved.b2bCustomer = mktCfg.b2bCustomer;
+        if (mktCfg.subsidiary) resolved.subsidiary = mktCfg.subsidiary;
+        if (mktCfg.location) resolved.location = mktCfg.location;
+        if (mktCfg.fbaLocation) resolved.fbaLocation = mktCfg.fbaLocation;
+        if (mktCfg.paymentMethod) resolved.paymentMethod = mktCfg.paymentMethod;
+        if (mktCfg.taxItem) resolved.taxItem = mktCfg.taxItem;
+        if (mktCfg.taxCode) resolved.taxCode = mktCfg.taxCode;
+
+        resolved._marketplaceConfigId = mktCfg.id;
+
+        return resolved;
+    }
+
     return {
         getAllConfigs,
         getConfig,
@@ -512,6 +631,7 @@ define(['N/search', 'N/record', 'N/log', 'N/runtime', './constants'], function (
         getMarketplaceConfigs,
         getMarketplaceConfig,
         resolveMarketplaceSettings,
+        resolveMarketplaceSettingsByName,
         getChargeAccountMap
     };
 });

@@ -25,9 +25,10 @@ define([
      */
     function resolveCurrencyId(marketplace) {
         if (!marketplace) return '1';
-        var mp = marketplace.toLowerCase();
-        if (mp === 'amazon.ca') return '3';
-        if (mp === 'amazon.com.mx') return '5';
+        var mp = marketplace.toLowerCase().trim();
+        // Amazon settlement format (e.g. 'Amazon.ca') or short names (e.g. 'CA')
+        if (mp === 'amazon.ca' || mp === 'ca' || mp === 'canada') return '3';
+        if (mp === 'amazon.com.mx' || mp === 'mx' || mp === 'mexico') return '5';
         return '1';
     }
 
@@ -92,9 +93,9 @@ define([
         var entry = chargeMap.map[key];
         if (!entry) return null;
 
-        var mp = (marketplace || '').toLowerCase();
-        if (mp === 'amazon.ca') return entry.itemCa || null;
-        if (mp === 'amazon.com.mx') return entry.itemMx || null;
+        var mp = (marketplace || '').toLowerCase().trim();
+        if (mp === 'amazon.ca' || mp === 'ca' || mp === 'canada') return entry.itemCa || null;
+        if (mp === 'amazon.com.mx' || mp === 'mx' || mp === 'mexico') return entry.itemMx || null;
         return entry.itemUs || null;
     }
 
@@ -272,6 +273,111 @@ define([
             amazonRef: orderId,
             lineCount: lineCount
         });
+
+        return { invoiceId: invoiceId, paymentTotal: paymentTotal };
+    }
+
+    // ========================================================================
+    // Settlement Invoice line update (existing invoices)
+    // ========================================================================
+
+    /**
+     * Updates an existing invoice with settlement line items (fees, shipping, promotions).
+     * Called when an invoice already exists for an order but its lines need to reflect
+     * the settlement data (e.g. FBA fees, shipping charges, promotion adjustments).
+     *
+     * @param {Object} config - Connector config
+     * @param {string|number} invoiceId - Existing NetSuite Invoice internal ID
+     * @param {Array}  orderLines - Settlement line objects for this order
+     * @param {string} marketplace - Marketplace name (e.g. 'Amazon.com')
+     * @param {Object} chargeMap - Charge-map object { map: { descLower: { itemUs, itemCa, itemMx } } }
+     * @returns {{ invoiceId: number, paymentTotal: number }}
+     */
+    function updateInvoiceLines(config, invoiceId, orderLines, marketplace, chargeMap) {
+        logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+            'financialService.updateInvoiceLines: Updating invoice ' + invoiceId +
+            ' with ' + (orderLines ? orderLines.length : 0) + ' settlement lines');
+
+        var inv = record.load({
+            type: record.Type.INVOICE,
+            id: invoiceId,
+            isDynamic: true
+        });
+
+        var paymentTotal = 0;
+        var linesAdded = 0;
+
+        for (var i = 0; i < orderLines.length; i++) {
+            var line = orderLines[i];
+            var amountType = line.amountType || line.amount_type || '';
+            var desc = line.amountDesc || line.desc || line.amount_desc || '';
+            var amount = parseFloat(line.amount) || 0;
+            var orderLineId = line.orderLineId || line.order_line_id || '';
+
+            // Always add to payment total
+            paymentTotal += amount;
+
+            // Apply promotion remapping
+            desc = remapPromotionDesc(amountType, desc);
+
+            // Skip Principal lines that are NOT promotions (added to paymentTotal only)
+            if (desc === 'Principal' && amountType !== 'Promotion') {
+                continue;
+            }
+
+            // Look up fee item from charge map
+            var itemId = lookupSettlementItem(desc, marketplace, chargeMap);
+            if (!itemId) {
+                logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                    'financialService.updateInvoiceLines: No item found for desc=' + desc +
+                    ', marketplace=' + marketplace + ', invoice=' + invoiceId + '. Skipping line.');
+                continue;
+            }
+
+            // Check if line already exists via custcol_celigo_etail_order_line_id
+            // Old process: update existing line's qty/amount; add new line if not found
+            if (orderLineId) {
+                var existingLine = inv.findSublistLineWithValue({
+                    sublistId: 'item',
+                    fieldId: 'custcol_celigo_etail_order_line_id',
+                    value: orderLineId
+                });
+                if (existingLine !== -1) {
+                    inv.selectLine({ sublistId: 'item', line: existingLine });
+                    inv.setCurrentSublistValue({ sublistId: 'item', fieldId: 'quantity', value: 1 });
+                    inv.setCurrentSublistValue({ sublistId: 'item', fieldId: 'amount', value: amount });
+                    inv.commitLine({ sublistId: 'item' });
+                    linesAdded++;
+                    continue;
+                }
+            }
+
+            // Add new line
+            inv.selectNewLine({ sublistId: 'item' });
+            inv.setCurrentSublistValue({ sublistId: 'item', fieldId: 'item', value: itemId });
+            inv.setCurrentSublistValue({ sublistId: 'item', fieldId: 'description', value: desc });
+            inv.setCurrentSublistValue({ sublistId: 'item', fieldId: 'quantity', value: 1 });
+            inv.setCurrentSublistValue({ sublistId: 'item', fieldId: 'amount', value: amount });
+            if (orderLineId) {
+                inv.setCurrentSublistValue({ sublistId: 'item', fieldId: 'custcol_celigo_etail_order_line_id', value: orderLineId });
+            }
+            inv.commitLine({ sublistId: 'item' });
+            linesAdded++;
+        }
+
+        if (linesAdded > 0) {
+            inv.save({ ignoreMandatoryFields: true });
+
+            logger.success(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                'Invoice ' + invoiceId + ' updated with ' + linesAdded + ' settlement lines', {
+                recordType: 'invoice',
+                recordId: invoiceId,
+                lineCount: linesAdded
+            });
+        } else {
+            logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                'financialService.updateInvoiceLines: No new lines to add for invoice ' + invoiceId);
+        }
 
         return { invoiceId: invoiceId, paymentTotal: paymentTotal };
     }
@@ -651,6 +757,7 @@ define([
 
     return {
         createSettlementInvoice,
+        updateInvoiceLines,
         createSettlementCreditMemo,
         createSettlementRefund,
         lookupInvoice,

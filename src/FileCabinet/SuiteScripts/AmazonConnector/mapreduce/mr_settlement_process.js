@@ -379,6 +379,10 @@ define([
                     return true;
                 }
 
+                // Resolve marketplace-specific config (customer, location, subsidiary, etc.)
+                // Old process used different customers per marketplace (e.g. Amazon.ca → customer 6533613)
+                var effectiveConfig = configHelper.resolveMarketplaceSettingsByName(config, marketplace);
+
                 // Get settlement lines for this order
                 var orderLines = getSettlementLines(settlementId, orderId, 'Order');
                 if (!orderLines || orderLines.length === 0) {
@@ -407,14 +411,14 @@ define([
 
                 var invoiceId, paymentTotal;
                 if (existingInvId) {
-                    invoiceId = existingInvId;
-                    paymentTotal = 0;
-                    for (var i = 0; i < orderLines.length; i++) {
-                        paymentTotal += parseFloat(orderLines[i].amount) || 0;
-                    }
+                    var updateResult = financialService.updateInvoiceLines(
+                        effectiveConfig, existingInvId, orderLines, marketplace, chargeMap
+                    );
+                    invoiceId = updateResult.invoiceId;
+                    paymentTotal = updateResult.paymentTotal;
                 } else {
                     var result2 = financialService.createSettlementInvoice(
-                        config, orderId, orderLines, marketplace, chargeMap
+                        effectiveConfig, orderId, orderLines, marketplace, chargeMap
                     );
                     invoiceId = result2.invoiceId;
                     paymentTotal = result2.paymentTotal;
@@ -430,7 +434,7 @@ define([
                         endDate: firstLine.postDateNs || new Date()
                     };
                     paymentId = financialService.createSettlementPayment(
-                        config, invoiceId, settlement, firstLine.postDateNs
+                        effectiveConfig, invoiceId, settlement, firstLine.postDateNs
                     );
                 }
 
@@ -449,12 +453,12 @@ define([
                 };
                 if (invoiceId) headerUpdates[SH.FIELDS.INVOICE_REC] = invoiceId;
                 if (paymentId) headerUpdates[SH.FIELDS.PAYMENT_REC] = String(paymentId);
-                if (config.customer) headerUpdates[SH.FIELDS.CUSTOMER] = config.customer;
+                if (effectiveConfig.customer) headerUpdates[SH.FIELDS.CUSTOMER] = effectiveConfig.customer;
                 record.submitFields({ type: SH.ID, id: headerId, values: headerUpdates });
 
                 logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,
                     'Phase B: Invoice ' + invoiceId + ', Payment ' + (paymentId || 'none') +
-                    ' for order ' + orderId);
+                    ' for order ' + orderId + ', marketplace ' + marketplace);
 
             } catch (e) {
                 logger.error(constants.LOG_TYPE.FINANCIAL_RECON,
@@ -503,6 +507,9 @@ define([
             var marketplace = result.getValue(SH.FIELDS.MARKETPLACE) || '';
 
             try {
+                // Resolve marketplace-specific config (customer, location, subsidiary, etc.)
+                var effectiveConfig = configHelper.resolveMarketplaceSettingsByName(config, marketplace);
+
                 var refundLines = getSettlementLines(settlementId, orderId, 'Refund');
                 if (!refundLines || refundLines.length === 0) {
                     record.submitFields({
@@ -514,14 +521,14 @@ define([
 
                 // Create credit memo
                 var creditMemoId = financialService.createSettlementCreditMemo(
-                    config, orderId, refundLines, marketplace, chargeMap
+                    effectiveConfig, orderId, refundLines, marketplace, chargeMap
                 );
 
                 // Create customer refund
                 var refundId = null;
                 if (creditMemoId) {
                     var settlId = refundLines[0] ? refundLines[0].settlementId : reportId;
-                    refundId = financialService.createSettlementRefund(config, creditMemoId, settlId);
+                    refundId = financialService.createSettlementRefund(effectiveConfig, creditMemoId, settlId);
                 }
 
                 // Track created records
@@ -801,7 +808,8 @@ define([
                 quantity: result.getValue(SL.FIELDS.QUANTITY),
                 postDate: result.getValue(SL.FIELDS.POST_DATE),
                 postDateNs: result.getValue(SL.FIELDS.POST_DATE_NS),
-                promoId: result.getValue(SL.FIELDS.PROMO_ID)
+                promoId: result.getValue(SL.FIELDS.PROMO_ID),
+                orderLineId: result.id  // Use settlement line internal ID for invoice line deduplication
             });
             return true;
         });
