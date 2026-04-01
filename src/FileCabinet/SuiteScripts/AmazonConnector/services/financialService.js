@@ -25,9 +25,10 @@ define([
      */
     function resolveCurrencyId(marketplace) {
         if (!marketplace) return '1';
-        var mp = marketplace.toLowerCase();
-        if (mp === 'amazon.ca') return '3';
-        if (mp === 'amazon.com.mx') return '5';
+        var mp = marketplace.toLowerCase().trim();
+        // Amazon settlement format (e.g. 'Amazon.ca') or short names (e.g. 'CA')
+        if (mp === 'amazon.ca' || mp === 'ca' || mp === 'canada') return '3';
+        if (mp === 'amazon.com.mx' || mp === 'mx' || mp === 'mexico') return '5';
         return '1';
     }
 
@@ -92,9 +93,9 @@ define([
         var entry = chargeMap.map[key];
         if (!entry) return null;
 
-        var mp = (marketplace || '').toLowerCase();
-        if (mp === 'amazon.ca') return entry.itemCa || null;
-        if (mp === 'amazon.com.mx') return entry.itemMx || null;
+        var mp = (marketplace || '').toLowerCase().trim();
+        if (mp === 'amazon.ca' || mp === 'ca' || mp === 'canada') return entry.itemCa || null;
+        if (mp === 'amazon.com.mx' || mp === 'mx' || mp === 'mexico') return entry.itemMx || null;
         return entry.itemUs || null;
     }
 
