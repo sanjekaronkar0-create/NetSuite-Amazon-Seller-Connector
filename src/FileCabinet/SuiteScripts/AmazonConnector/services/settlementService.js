@@ -18,6 +18,7 @@ define([
     const STL = constants.CUSTOM_RECORDS.SETTLEMENT;
 
     var _settlementFolderId = null;
+    var _dataRootFolderId = null;
 
     /**
      * Fetches available settlement reports from Amazon.
@@ -364,22 +365,48 @@ define([
     }
 
     /**
-     * Gets or creates the SettlementReports folder under AmazonConnector.
+     * Gets or creates the root-level AmazonConnectorData folder.
+     * This folder lives outside SuiteScripts to avoid the NetSuite restriction
+     * that prevents writing data files where system (script) files are present.
+     * @returns {number} Internal ID of the AmazonConnectorData folder
+     */
+    function getDataRootFolderId() {
+        if (_dataRootFolderId) return _dataRootFolderId;
+
+        var folderSearch = search.create({
+            type: 'folder',
+            filters: [
+                ['name', 'is', 'AmazonConnectorData'],
+                'AND',
+                ['istoplevel', 'is', 'T']
+            ],
+            columns: ['internalid']
+        });
+
+        var results = folderSearch.run().getRange({ start: 0, end: 1 });
+        if (results.length > 0) {
+            _dataRootFolderId = parseInt(results[0].id, 10);
+            return _dataRootFolderId;
+        }
+
+        var folder = record.create({ type: record.Type.FOLDER });
+        folder.setValue({ fieldId: 'name', value: 'AmazonConnectorData' });
+        _dataRootFolderId = folder.save();
+
+        log.debug({ title: 'settlementService', details: 'Created AmazonConnectorData root folder with ID: ' + _dataRootFolderId });
+        return _dataRootFolderId;
+    }
+
+    /**
+     * Gets or creates the SettlementReports folder under AmazonConnectorData.
+     * Uses a root-level data folder (not SuiteScripts) to avoid
+     * "cannot write where system files are present" errors.
      * @returns {number} Internal ID of the SettlementReports folder
      */
     function getSettlementFolderId() {
         if (_settlementFolderId) return _settlementFolderId;
 
-        var acSearch = search.create({
-            type: 'folder',
-            filters: [['name', 'is', 'AmazonConnector']],
-            columns: ['internalid']
-        });
-        var acResults = acSearch.run().getRange({ start: 0, end: 1 });
-        if (acResults.length === 0) {
-            throw new Error('Cannot find AmazonConnector folder in File Cabinet');
-        }
-        var parentId = parseInt(acResults[0].id, 10);
+        var parentId = getDataRootFolderId();
 
         var folderSearch = search.create({
             type: 'folder',

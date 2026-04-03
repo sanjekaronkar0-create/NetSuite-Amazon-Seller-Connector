@@ -9,30 +9,55 @@
 define(['N/file', 'N/search', 'N/record', 'N/log'], function (file, search, record, log) {
 
     var _tempFolderId = null;
+    var _dataRootFolderId = null;
 
     /**
-     * Gets or creates the temp folder under SuiteScripts/AmazonConnector/temp.
+     * Gets or creates the root-level AmazonConnectorData folder.
+     * This folder lives outside SuiteScripts to avoid the NetSuite restriction
+     * that prevents writing data files where system (script) files are present.
+     * @returns {number} Internal ID of the AmazonConnectorData folder
+     */
+    function getDataRootFolderId() {
+        if (_dataRootFolderId) return _dataRootFolderId;
+
+        var folderSearch = search.create({
+            type: 'folder',
+            filters: [
+                ['name', 'is', 'AmazonConnectorData'],
+                'AND',
+                ['istoplevel', 'is', 'T']
+            ],
+            columns: ['internalid']
+        });
+
+        var results = folderSearch.run().getRange({ start: 0, end: 1 });
+        if (results.length > 0) {
+            _dataRootFolderId = parseInt(results[0].id, 10);
+            return _dataRootFolderId;
+        }
+
+        // Create root-level folder outside SuiteScripts
+        var folder = record.create({ type: record.Type.FOLDER });
+        folder.setValue({ fieldId: 'name', value: 'AmazonConnectorData' });
+        _dataRootFolderId = folder.save();
+
+        log.debug({ title: 'mrDataHelper', details: 'Created AmazonConnectorData root folder with ID: ' + _dataRootFolderId });
+        return _dataRootFolderId;
+    }
+
+    /**
+     * Gets or creates the temp folder under AmazonConnectorData/temp.
+     * Uses a root-level data folder (not SuiteScripts) to avoid
+     * "cannot write where system files are present" errors.
      * Caches the folder ID after first lookup.
      * @returns {number} Internal ID of the temp folder
      */
     function getTempFolderId() {
         if (_tempFolderId) return _tempFolderId;
 
-        // Find AmazonConnector folder first (cannot use dot notation joins on folder searches)
-        var acSearch = search.create({
-            type: 'folder',
-            filters: [['name', 'is', 'AmazonConnector']],
-            columns: ['internalid']
-        });
+        var parentId = getDataRootFolderId();
 
-        var acResults = acSearch.run().getRange({ start: 0, end: 1 });
-        if (acResults.length === 0) {
-            throw new Error('Cannot find AmazonConnector folder in File Cabinet');
-        }
-
-        var parentId = parseInt(acResults[0].id, 10);
-
-        // Try to find existing temp folder under AmazonConnector
+        // Try to find existing temp folder under AmazonConnectorData
         var folderSearch = search.create({
             type: 'folder',
             filters: [
