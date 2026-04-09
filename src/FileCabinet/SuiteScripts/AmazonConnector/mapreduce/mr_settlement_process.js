@@ -416,14 +416,17 @@ define([
                     }
                 }
 
-                // If no invoice exists, skip this order (old process behavior)
+                // If no invoice exists, skip this order (old process behavior — settlement never creates invoices)
                 if (!existingInvId) {
                     var skipMsg = 'There is no invoice created for this order yet. Settlement can not be updated.';
                     logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
                         'Phase B: Skipping order ' + orderId + ': ' + skipMsg);
                     record.submitFields({
                         type: SH.ID, id: headerId,
-                        values: { [SH.FIELDS.ERROR]: skipMsg }
+                        values: {
+                            [SH.FIELDS.ERROR]: skipMsg,
+                            [SH.FIELDS.INVOICE_ERROR]: skipMsg
+                        }
                     });
                     return true;
                 }
@@ -456,14 +459,16 @@ define([
                 // Mark order lines as processed
                 markLinesProcessed(orderLines);
 
-                // Update header
+                // Update header (Payment is MULTISELECT — pass array)
                 var headerUpdates = {
                     [SH.FIELDS.UPDATE_INV]: false,
-                    [SH.FIELDS.DATA_LOADED]: false,
-                    [SH.FIELDS.ERROR]: ''
+                    [SH.FIELDS.DATA_LOADED]: true,
+                    [SH.FIELDS.SETTLED]: true,
+                    [SH.FIELDS.ERROR]: '',
+                    [SH.FIELDS.INVOICE_ERROR]: ''
                 };
                 if (invoiceId) headerUpdates[SH.FIELDS.INVOICE_REC] = invoiceId;
-                if (paymentId) headerUpdates[SH.FIELDS.PAYMENT_REC] = String(paymentId);
+                if (paymentId) headerUpdates[SH.FIELDS.PAYMENT_REC] = [paymentId];
                 if (effectiveConfig.customer) headerUpdates[SH.FIELDS.CUSTOMER] = effectiveConfig.customer;
                 record.submitFields({ type: SH.ID, id: headerId, values: headerUpdates });
 
@@ -549,13 +554,13 @@ define([
                 // Mark refund lines as processed
                 markLinesProcessed(refundLines);
 
-                // Update header
+                // Update header (Credit Memo and Refund are MULTISELECT — pass arrays)
                 var headerUpdates = {
                     [SH.FIELDS.REFUND_REQUIRED]: false,
                     [SH.FIELDS.ERROR]: ''
                 };
-                if (creditMemoId) headerUpdates[SH.FIELDS.CREDIT_MEMO] = creditMemoId;
-                if (refundId) headerUpdates[SH.FIELDS.REFUND] = refundId;
+                if (creditMemoId) headerUpdates[SH.FIELDS.CREDIT_MEMO] = [creditMemoId];
+                if (refundId) headerUpdates[SH.FIELDS.REFUND] = [refundId];
                 record.submitFields({ type: SH.ID, id: headerId, values: headerUpdates });
 
                 logger.progress(constants.LOG_TYPE.FINANCIAL_RECON,

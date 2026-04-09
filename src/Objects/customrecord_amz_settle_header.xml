@@ -167,32 +167,32 @@
       <defaultchecked>F</defaultchecked>
       <defaultselection></defaultselection>
       <defaultvalue></defaultvalue>
-      <description>Payment record IDs (comma-separated)</description>
+      <description>Linked Payment Record(s)</description>
       <displayheight></displayheight>
       <displaytype>NORMAL</displaytype>
       <displaywidth></displaywidth>
       <dynamicdefault></dynamicdefault>
       <enabletextenhance>F</enabletextenhance>
       <encryptatrest>F</encryptatrest>
-      <fieldtype>CLOBTEXT</fieldtype>
+      <fieldtype>MULTISELECT</fieldtype>
       <globalsearch>F</globalsearch>
       <help></help>
       <isformula>F</isformula>
       <ismandatory>F</ismandatory>
       <isparent>F</isparent>
-      <label>Payment Records</label>
+      <label>Payment Record</label>
       <linktext></linktext>
       <maxlength></maxlength>
       <maxvalue></maxvalue>
       <minvalue></minvalue>
-      <onparentdelete></onparentdelete>
+      <onparentdelete>SET_NULL</onparentdelete>
       <parentsubtab></parentsubtab>
       <rolerestrict>F</rolerestrict>
       <searchcomparefield></searchcomparefield>
       <searchdefault></searchdefault>
       <searchlevel>2</searchlevel>
-      <selectrecordtype></selectrecordtype>
-      <showinlist>F</showinlist>
+      <selectrecordtype>-30</selectrecordtype>
+      <showinlist>T</showinlist>
       <sourcefilterby></sourcefilterby>
       <sourcefrom></sourcefrom>
       <sourcelist></sourcelist>
@@ -247,14 +247,14 @@
       <defaultchecked>F</defaultchecked>
       <defaultselection></defaultselection>
       <defaultvalue></defaultvalue>
-      <description>Linked Credit Memo</description>
+      <description>Linked Credit Memo(s)</description>
       <displayheight></displayheight>
       <displaytype>NORMAL</displaytype>
       <displaywidth></displaywidth>
       <dynamicdefault></dynamicdefault>
       <enabletextenhance>F</enabletextenhance>
       <encryptatrest>F</encryptatrest>
-      <fieldtype>SELECT</fieldtype>
+      <fieldtype>MULTISELECT</fieldtype>
       <globalsearch>F</globalsearch>
       <help></help>
       <isformula>F</isformula>
@@ -265,7 +265,7 @@
       <maxlength></maxlength>
       <maxvalue></maxvalue>
       <minvalue></minvalue>
-      <onparentdelete>NO_ACTION</onparentdelete>
+      <onparentdelete>SET_NULL</onparentdelete>
       <parentsubtab></parentsubtab>
       <rolerestrict>F</rolerestrict>
       <searchcomparefield></searchcomparefield>
@@ -278,6 +278,18 @@
       <sourcelist></sourcelist>
       <storevalue>T</storevalue>
       <subtab></subtab>
+      <customfieldfilters>
+        <customfieldfilter>
+          <fldcomparefield></fldcomparefield>
+          <fldfilter>STDBODYTRANTYPE</fldfilter>
+          <fldfilterchecked></fldfilterchecked>
+          <fldfiltercomparetype>EQ</fldfiltercomparetype>
+          <fldfilternotnull>F</fldfilternotnull>
+          <fldfilternull>F</fldfilternull>
+          <fldfiltersel>CREDITMEMO</fldfiltersel>
+          <fldfilterval></fldfilterval>
+        </customfieldfilter>
+      </customfieldfilters>
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_sh_refund">
       <accesslevel>2</accesslevel>
@@ -287,25 +299,25 @@
       <defaultchecked>F</defaultchecked>
       <defaultselection></defaultselection>
       <defaultvalue></defaultvalue>
-      <description>Linked Customer Refund</description>
+      <description>Linked Customer Refund(s)</description>
       <displayheight></displayheight>
       <displaytype>NORMAL</displaytype>
       <displaywidth></displaywidth>
       <dynamicdefault></dynamicdefault>
       <enabletextenhance>F</enabletextenhance>
       <encryptatrest>F</encryptatrest>
-      <fieldtype>SELECT</fieldtype>
+      <fieldtype>MULTISELECT</fieldtype>
       <globalsearch>F</globalsearch>
       <help></help>
       <isformula>F</isformula>
       <ismandatory>F</ismandatory>
       <isparent>F</isparent>
-      <label>Customer Refund</label>
+      <label>Refund</label>
       <linktext></linktext>
       <maxlength></maxlength>
       <maxvalue></maxvalue>
       <minvalue></minvalue>
-      <onparentdelete>NO_ACTION</onparentdelete>
+      <onparentdelete>SET_NULL</onparentdelete>
       <parentsubtab></parentsubtab>
       <rolerestrict>F</rolerestrict>
       <searchcomparefield></searchcomparefield>
@@ -318,6 +330,18 @@
       <sourcelist></sourcelist>
       <storevalue>T</storevalue>
       <subtab></subtab>
+      <customfieldfilters>
+        <customfieldfilter>
+          <fldcomparefield></fldcomparefield>
+          <fldfilter>STDBODYTRANTYPE</fldfilter>
+          <fldfilterchecked></fldfilterchecked>
+          <fldfiltercomparetype>EQ</fldfiltercomparetype>
+          <fldfilternotnull>F</fldfilternotnull>
+          <fldfilternull>F</fldfilternull>
+          <fldfiltersel>CUSTOMERREFUND</fldfiltersel>
+          <fldfilterval></fldfilterval>
+        </customfieldfilter>
+      </customfieldfilters>
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_sh_data_loaded">
       <accesslevel>2</accesslevel>
@@ -461,6 +485,86 @@
       <ismandatory>F</ismandatory>
       <isparent>F</isparent>
       <label>Error</label>
+      <linktext></linktext>
+      <maxlength></maxlength>
+      <maxvalue></maxvalue>
+      <minvalue></minvalue>
+      <onparentdelete></onparentdelete>
+      <parentsubtab></parentsubtab>
+      <rolerestrict>F</rolerestrict>
+      <searchcomparefield></searchcomparefield>
+      <searchdefault></searchdefault>
+      <searchlevel>2</searchlevel>
+      <selectrecordtype></selectrecordtype>
+      <showinlist>T</showinlist>
+      <sourcefilterby></sourcefilterby>
+      <sourcefrom></sourcefrom>
+      <sourcelist></sourcelist>
+      <storevalue>T</storevalue>
+      <subtab></subtab>
+    </customrecordcustomfield>
+    <customrecordcustomfield scriptid="custrecord_amz_sh_invoice_error">
+      <accesslevel>2</accesslevel>
+      <allowquickadd>F</allowquickadd>
+      <applyformatting>F</applyformatting>
+      <checkspelling>F</checkspelling>
+      <defaultchecked>F</defaultchecked>
+      <defaultselection></defaultselection>
+      <defaultvalue></defaultvalue>
+      <description>Invoice-specific error message from processing</description>
+      <displayheight></displayheight>
+      <displaytype>NORMAL</displaytype>
+      <displaywidth></displaywidth>
+      <dynamicdefault></dynamicdefault>
+      <enabletextenhance>F</enabletextenhance>
+      <encryptatrest>F</encryptatrest>
+      <fieldtype>CLOBTEXT</fieldtype>
+      <globalsearch>F</globalsearch>
+      <help></help>
+      <isformula>F</isformula>
+      <ismandatory>F</ismandatory>
+      <isparent>F</isparent>
+      <label>Invoice Error</label>
+      <linktext></linktext>
+      <maxlength></maxlength>
+      <maxvalue></maxvalue>
+      <minvalue></minvalue>
+      <onparentdelete></onparentdelete>
+      <parentsubtab></parentsubtab>
+      <rolerestrict>F</rolerestrict>
+      <searchcomparefield></searchcomparefield>
+      <searchdefault></searchdefault>
+      <searchlevel>2</searchlevel>
+      <selectrecordtype></selectrecordtype>
+      <showinlist>T</showinlist>
+      <sourcefilterby></sourcefilterby>
+      <sourcefrom></sourcefrom>
+      <sourcelist></sourcelist>
+      <storevalue>T</storevalue>
+      <subtab></subtab>
+    </customrecordcustomfield>
+    <customrecordcustomfield scriptid="custrecord_amz_sh_settled">
+      <accesslevel>2</accesslevel>
+      <allowquickadd>F</allowquickadd>
+      <applyformatting>F</applyformatting>
+      <checkspelling>F</checkspelling>
+      <defaultchecked>F</defaultchecked>
+      <defaultselection></defaultselection>
+      <defaultvalue></defaultvalue>
+      <description>Settlement has been fully updated/processed for this order</description>
+      <displayheight></displayheight>
+      <displaytype>NORMAL</displaytype>
+      <displaywidth></displaywidth>
+      <dynamicdefault></dynamicdefault>
+      <enabletextenhance>F</enabletextenhance>
+      <encryptatrest>F</encryptatrest>
+      <fieldtype>CHECKBOX</fieldtype>
+      <globalsearch>F</globalsearch>
+      <help></help>
+      <isformula>F</isformula>
+      <ismandatory>F</ismandatory>
+      <isparent>F</isparent>
+      <label>Settlement Updated</label>
       <linktext></linktext>
       <maxlength></maxlength>
       <maxvalue></maxvalue>

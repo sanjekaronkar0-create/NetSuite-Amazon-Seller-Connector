@@ -235,6 +235,8 @@ define([], function () {
                 REFUND_REQUIRED: 'custrecord_amz_sh_refund_req',
                 UPDATE_INV: 'custrecord_amz_sh_update_inv',
                 ERROR: 'custrecord_amz_sh_error',
+                INVOICE_ERROR: 'custrecord_amz_sh_invoice_error',
+                SETTLED: 'custrecord_amz_sh_settled',
                 CONFIG: 'custrecord_amz_sh_config',
                 SUMMARY: 'custrecord_amz_sh_summary'
             }
