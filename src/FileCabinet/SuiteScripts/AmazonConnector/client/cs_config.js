@@ -63,6 +63,64 @@ define(['N/currentRecord', 'N/ui/dialog'], function (currentRecord, dialog) {
     }
 
     /**
+     * Fetches and imports a single Amazon order by Order ID.
+     */
+    function lookupOrder() {
+        var rec = currentRecord.get();
+        var configId = rec.getValue({ fieldId: 'custpage_lookup_config' });
+        var orderId = rec.getValue({ fieldId: 'custpage_lookup_order_id' });
+
+        if (!configId || !orderId) {
+            dialog.alert({
+                title: 'Validation',
+                message: 'Please enter both Config Internal ID and Amazon Order ID.'
+            });
+            return;
+        }
+
+        dialog.confirm({
+            title: 'Lookup Order',
+            message: 'Fetch and import Amazon order ' + orderId + ' using config ' + configId + '?'
+        }).then(function (result) {
+            if (result) {
+                rec.setValue({ fieldId: 'custpage_action', value: 'lookup_order' });
+                var form = document.getElementById('main_form');
+                if (form) form.submit();
+            }
+        });
+    }
+
+    /**
+     * Fetches and imports Amazon orders within a date range.
+     */
+    function fetchOrdersByDate() {
+        var rec = currentRecord.get();
+        var configId = rec.getValue({ fieldId: 'custpage_lookup_config' });
+        var dateFrom = rec.getValue({ fieldId: 'custpage_lookup_date_from' });
+        var dateTo = rec.getValue({ fieldId: 'custpage_lookup_date_to' });
+
+        if (!configId || !dateFrom || !dateTo) {
+            dialog.alert({
+                title: 'Validation',
+                message: 'Please enter Config Internal ID, Date From, and Date To.'
+            });
+            return;
+        }
+
+        dialog.confirm({
+            title: 'Fetch Orders by Date',
+            message: 'Fetch and import all Amazon orders from ' + dateFrom + ' to ' + dateTo +
+                ' using config ' + configId + '?'
+        }).then(function (result) {
+            if (result) {
+                rec.setValue({ fieldId: 'custpage_action', value: 'fetch_orders_daterange' });
+                var form = document.getElementById('main_form');
+                if (form) form.submit();
+            }
+        });
+    }
+
+    /**
      * Tests connection for the first config or a user-specified config ID.
      */
     function testConnection() {
@@ -94,6 +152,8 @@ define(['N/currentRecord', 'N/ui/dialog'], function (currentRecord, dialog) {
     return {
         pageInit,
         triggerSync,
+        lookupOrder,
+        fetchOrdersByDate,
         testConnection,
         saveRecord
     };

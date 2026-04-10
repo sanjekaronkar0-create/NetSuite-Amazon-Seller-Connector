@@ -438,6 +438,24 @@ define([
                 var invoiceId = updateResult.invoiceId;
                 var paymentTotal = updateResult.paymentTotal;
 
+                // If no lines were added AND fee descriptions were skipped, charge map is incomplete.
+                // Don't create payment — leave UPDATE_INV=true so this order is retried after charge map fix.
+                if (updateResult.linesAdded === 0 && updateResult.skippedDescs && updateResult.skippedDescs.length > 0) {
+                    var missingDescs = updateResult.skippedDescs.join(', ');
+                    var noLinesMsg = 'Invoice ' + existingInvId + ' found but no settlement fee lines could be added. ' +
+                        'Missing charge map items for: ' + missingDescs + ' (marketplace: ' + marketplace + ')';
+                    logger.warn(constants.LOG_TYPE.FINANCIAL_RECON,
+                        'Phase B: ' + noLinesMsg + ' (order ' + orderId + ')');
+                    record.submitFields({
+                        type: SH.ID, id: headerId,
+                        values: {
+                            [SH.FIELDS.ERROR]: noLinesMsg,
+                            [SH.FIELDS.INVOICE_ERROR]: noLinesMsg
+                        }
+                    });
+                    return true;
+                }
+
                 // Create customer payment (transform invoice → payment, like old process)
                 var paymentId = null;
                 if (invoiceId && paymentTotal != null && paymentTotal !== 0) {

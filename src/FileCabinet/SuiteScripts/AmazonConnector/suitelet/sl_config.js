@@ -14,11 +14,15 @@ define([
     'N/runtime',
     'N/redirect',
     'N/log',
+    'N/format',
     '../lib/constants',
     '../lib/configHelper',
+    '../lib/mrDataHelper',
     '../lib/logger',
-    '../services/connectionTestService'
-], function (serverWidget, search, task, url, runtime, redirect, log, constants, configHelper, logger, connectionTestService) {
+    '../services/connectionTestService',
+    '../services/orderService',
+    '../lib/amazonClient'
+], function (serverWidget, search, task, url, runtime, redirect, log, format, constants, configHelper, mrDataHelper, logger, connectionTestService, orderService, amazonClient) {
 
     const CR = constants.CUSTOM_RECORDS;
 
@@ -152,6 +156,48 @@ define([
         errorSublist.addField({ id: 'custpage_err_next', type: serverWidget.FieldType.TEXT, label: 'Next Retry' });
 
         populateErrorQueue(errorSublist);
+
+        // -- Order Lookup Tab --
+        form.addTab({ id: 'custpage_tab_lookup', label: 'Order Lookup' });
+
+        form.addField({
+            id: 'custpage_lookup_config',
+            type: serverWidget.FieldType.TEXT,
+            label: 'Config Internal ID',
+            container: 'custpage_tab_lookup'
+        });
+
+        form.addField({
+            id: 'custpage_lookup_order_id',
+            type: serverWidget.FieldType.TEXT,
+            label: 'Amazon Order ID',
+            container: 'custpage_tab_lookup'
+        });
+
+        form.addField({
+            id: 'custpage_lookup_date_from',
+            type: serverWidget.FieldType.DATE,
+            label: 'Date From',
+            container: 'custpage_tab_lookup'
+        });
+
+        form.addField({
+            id: 'custpage_lookup_date_to',
+            type: serverWidget.FieldType.DATE,
+            label: 'Date To',
+            container: 'custpage_tab_lookup'
+        });
+
+        form.addButton({
+            id: 'custpage_btn_lookup_order',
+            label: 'Lookup Order',
+            functionName: 'lookupOrder()'
+        });
+        form.addButton({
+            id: 'custpage_btn_fetch_daterange',
+            label: 'Fetch Orders by Date',
+            functionName: 'fetchOrdersByDate()'
+        });
 
         // -- Item Mapping Stats Tab --
         const mappingTab = form.addTab({ id: 'custpage_tab_mapping', label: 'Item Mapping' });
@@ -312,6 +358,14 @@ define([
                 }
             }
 
+            if (action === 'lookup_order') {
+                handleLookupOrder(context);
+            }
+
+            if (action === 'fetch_orders_daterange') {
+                handleFetchOrdersByDateRange(context);
+            }
+
             const syncInfo = syncMap[action];
             if (syncInfo) {
                 triggerScheduledScript(syncInfo.s, syncInfo.d);
@@ -339,6 +393,184 @@ define([
         const taskId = scriptTask.submit();
         logger.success(constants.LOG_TYPE.API_CALL,
             'Manual sync triggered: ' + scriptId + ' (Task: ' + taskId + ')');
+    }
+
+    /**
+     * Handles single order lookup by Amazon Order ID.
+     * Fetches the order and its items from Amazon, then triggers MR import.
+     */
+    function handleLookupOrder(context) {
+        var configId = context.request.parameters.custpage_lookup_config;
+        var orderId = context.request.parameters.custpage_lookup_order_id;
+
+        if (!configId || !orderId) {
+            logger.error(constants.LOG_TYPE.ORDER_SYNC,
+                'Order Lookup: Missing Config ID or Amazon Order ID.');
+            return;
+        }
+
+        try {
+            var config = configHelper.getConfig(configId);
+            if (!config) {
+                logger.error(constants.LOG_TYPE.ORDER_SYNC,
+                    'Order Lookup: Config not found for ID ' + configId);
+                return;
+            }
+
+            // Fetch order from Amazon
+            var orderData = orderService.fetchSingleOrder(config, orderId);
+            if (!orderData) {
+                logger.error(constants.LOG_TYPE.ORDER_SYNC,
+                    'Order Lookup: No order data returned for ' + orderId);
+                return;
+            }
+
+            // Fetch order items
+            var itemsResponse;
+            try {
+                itemsResponse = amazonClient.getOrderItems(config, orderId);
+            } catch (itemErr) {
+                logger.warn(constants.LOG_TYPE.ORDER_SYNC,
+                    'Order Lookup: Could not fetch items for ' + orderId + ': ' + itemErr.message);
+            }
+
+            // Wrap in array for MR import compatibility
+            var orderObj = orderData;
+            if (itemsResponse) {
+                var payload = itemsResponse.payload || itemsResponse;
+                orderObj.OrderItems = payload.OrderItems || [];
+            }
+
+            // Write to temp file and trigger MR import
+            var fileId = mrDataHelper.writeDataFile({
+                configId: configId,
+                orders: [orderObj]
+            }, 'order_lookup');
+
+            var mrTask = task.create({
+                taskType: task.TaskType.MAP_REDUCE,
+                scriptId: constants.SCRIPT_IDS.MR_ORDER_IMPORT,
+                deploymentId: constants.DEPLOY_IDS.MR_ORDER_IMPORT,
+                params: {
+                    custscript_amz_mr_order_data: String(fileId)
+                }
+            });
+
+            var taskId = mrDataHelper.submitMrTask(mrTask, constants.LOG_TYPE.ORDER_SYNC, logger);
+            if (!taskId) {
+                mrDataHelper.deleteTempFile(fileId);
+                logger.warn(constants.LOG_TYPE.ORDER_SYNC,
+                    'Order Lookup: MR import already running. Order ' + orderId + ' will be picked up on next sync.');
+                return;
+            }
+
+            logger.success(constants.LOG_TYPE.ORDER_SYNC,
+                'Order Lookup: Fetched order ' + orderId + ' and triggered MR import. Task: ' + taskId, {
+                configId: configId,
+                amazonRef: orderId
+            });
+        } catch (e) {
+            logger.error(constants.LOG_TYPE.ORDER_SYNC,
+                'Order Lookup failed for ' + orderId + ': ' + e.message, {
+                configId: configId,
+                details: e.stack
+            });
+        }
+    }
+
+    /**
+     * Handles fetching orders from Amazon within a date range and triggering MR import.
+     */
+    function handleFetchOrdersByDateRange(context) {
+        var configId = context.request.parameters.custpage_lookup_config;
+        var dateFrom = context.request.parameters.custpage_lookup_date_from;
+        var dateTo = context.request.parameters.custpage_lookup_date_to;
+
+        if (!configId || !dateFrom || !dateTo) {
+            logger.error(constants.LOG_TYPE.ORDER_SYNC,
+                'Date Range Fetch: Missing Config ID, Date From, or Date To.');
+            return;
+        }
+
+        try {
+            var config = configHelper.getConfig(configId);
+            if (!config) {
+                logger.error(constants.LOG_TYPE.ORDER_SYNC,
+                    'Date Range Fetch: Config not found for ID ' + configId);
+                return;
+            }
+
+            // Convert NetSuite dates to ISO 8601
+            var parsedFrom = format.parse({ value: dateFrom, type: format.Type.DATE });
+            var parsedTo = format.parse({ value: dateTo, type: format.Type.DATE });
+            // Set dateTo to end of day
+            parsedTo.setHours(23, 59, 59, 999);
+
+            var isoFrom = parsedFrom.toISOString();
+            var isoTo = parsedTo.toISOString();
+
+            // Fetch orders from Amazon
+            var orders = orderService.fetchOrdersByDateRange(config, isoFrom, isoTo);
+
+            if (!orders || orders.length === 0) {
+                logger.progress(constants.LOG_TYPE.ORDER_SYNC,
+                    'Date Range Fetch: No orders found from ' + isoFrom + ' to ' + isoTo +
+                    ' for config ' + configId);
+                return;
+            }
+
+            // Filter out existing orders
+            var newOrders = [];
+            for (var i = 0; i < orders.length; i++) {
+                var existing = orderService.findExistingOrderMap(orders[i].AmazonOrderId);
+                if (!existing) {
+                    newOrders.push(orders[i]);
+                }
+            }
+
+            if (newOrders.length === 0) {
+                logger.progress(constants.LOG_TYPE.ORDER_SYNC,
+                    'Date Range Fetch: All ' + orders.length + ' orders already exist in NetSuite.');
+                return;
+            }
+
+            // Write to temp file and trigger MR import
+            var fileId = mrDataHelper.writeDataFile({
+                configId: configId,
+                orders: newOrders
+            }, 'daterange_orders');
+
+            var mrTask = task.create({
+                taskType: task.TaskType.MAP_REDUCE,
+                scriptId: constants.SCRIPT_IDS.MR_ORDER_IMPORT,
+                deploymentId: constants.DEPLOY_IDS.MR_ORDER_IMPORT,
+                params: {
+                    custscript_amz_mr_order_data: String(fileId)
+                }
+            });
+
+            var taskId = mrDataHelper.submitMrTask(mrTask, constants.LOG_TYPE.ORDER_SYNC, logger);
+            if (!taskId) {
+                mrDataHelper.deleteTempFile(fileId);
+                logger.warn(constants.LOG_TYPE.ORDER_SYNC,
+                    'Date Range Fetch: MR import already running. ' + newOrders.length +
+                    ' orders will need to be re-fetched.');
+                return;
+            }
+
+            logger.success(constants.LOG_TYPE.ORDER_SYNC,
+                'Date Range Fetch: Found ' + orders.length + ' orders (' + newOrders.length +
+                ' new). MR import triggered. Task: ' + taskId, {
+                configId: configId,
+                details: 'Date range: ' + isoFrom + ' to ' + isoTo
+            });
+        } catch (e) {
+            logger.error(constants.LOG_TYPE.ORDER_SYNC,
+                'Date Range Fetch failed: ' + e.message, {
+                configId: configId,
+                details: e.stack
+            });
+        }
     }
 
     /**
