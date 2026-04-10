@@ -1,5 +1,6 @@
 <customrecordtype scriptid="customrecord_amz_connector_config">
   <accesstype>CUSTRECORDENTRYPERM</accesstype>
+  <aidescription></aidescription>
   <allowattachments>T</allowattachments>
   <allowinlinedeleting>F</allowinlinedeleting>
   <allowinlinedetaching>T</allowinlinedetaching>
@@ -41,6 +42,7 @@
   <customrecordcustomfields>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_marketplace">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -81,6 +83,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_seller_id">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -121,6 +124,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_client_id">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -161,6 +165,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_client_secret">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -201,6 +206,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_refresh_token">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -241,6 +247,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_endpoint">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -281,6 +288,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_marketplace_id">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -321,6 +329,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_location">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -361,6 +370,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_order_enabled">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -401,6 +411,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_inv_enabled">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -441,6 +452,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_fulfill_enabled">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -481,6 +493,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_settle_enabled">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -521,6 +534,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_return_enabled">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -561,6 +575,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_last_order_sync">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -601,6 +616,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_last_inv_sync">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -641,6 +657,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_last_settle_sync">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -681,6 +698,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_payment_method">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>T</applyformatting>
       <checkspelling>F</checkspelling>
@@ -721,6 +739,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_customer">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -761,6 +780,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_pricing_enabled">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -801,6 +821,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_catalog_enabled">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -841,6 +862,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_last_return_sync">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -881,6 +903,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_last_pricing_sync">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -921,6 +944,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_last_catalog_sync">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -961,6 +985,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_order_type">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -1001,6 +1026,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_so_form">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>T</applyformatting>
       <checkspelling>F</checkspelling>
@@ -1041,6 +1067,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_cs_form">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>T</applyformatting>
       <checkspelling>F</checkspelling>
@@ -1081,6 +1108,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_settle_account">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -1121,6 +1149,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_fee_account">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -1161,6 +1190,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_fba_fee_account">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -1201,6 +1231,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_refund_account">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -1241,6 +1272,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_promo_account">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -1281,6 +1313,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_shipping_item">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -1321,6 +1354,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_discount_item">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -1361,6 +1395,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_fba_enabled">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -1401,6 +1436,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_fba_location">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -1441,6 +1477,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_fba_customer">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -1481,6 +1518,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_b2b_customer">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -1521,6 +1559,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_addl_mkt_ids">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -1561,6 +1600,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_auto_credit_memo">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -1601,6 +1641,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_auto_deposit">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -1641,6 +1682,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_tax_item">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -1681,6 +1723,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_tax_code">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -1721,6 +1764,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_max_retries">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>T</applyformatting>
       <checkspelling>F</checkspelling>
@@ -1761,6 +1805,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_retry_delay">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>T</applyformatting>
       <checkspelling>F</checkspelling>
@@ -1801,6 +1846,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_notify_error">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -1841,6 +1887,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_notify_email">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -1881,6 +1928,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_notify_sync">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -1921,6 +1969,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_order_interval">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>T</applyformatting>
       <checkspelling>F</checkspelling>
@@ -1961,6 +2010,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_inv_interval">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>T</applyformatting>
       <checkspelling>F</checkspelling>
@@ -2001,6 +2051,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_settle_interval">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>T</applyformatting>
       <checkspelling>F</checkspelling>
@@ -2041,6 +2092,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_return_interval">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>T</applyformatting>
       <checkspelling>F</checkspelling>
@@ -2081,6 +2133,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_pricing_interval">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>T</applyformatting>
       <checkspelling>F</checkspelling>
@@ -2121,6 +2174,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_catalog_interval">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>T</applyformatting>
       <checkspelling>F</checkspelling>
@@ -2161,6 +2215,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_log_retention">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>T</applyformatting>
       <checkspelling>F</checkspelling>
@@ -2201,6 +2256,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_fba_inv_sync">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -2241,6 +2297,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_cancel_enabled">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -2281,6 +2338,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_cancel_action">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -2321,6 +2379,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_fee_acct_cad">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -2361,6 +2420,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_fee_acct_mxn">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -2401,6 +2461,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_refund_pay_acct">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -2441,6 +2502,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_settle_inv_form">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -2481,6 +2543,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_use_charge_map">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -2521,6 +2584,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_subsidiary">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
@@ -2561,6 +2625,7 @@
     </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_amz_cfg_inv_form">
       <accesslevel>2</accesslevel>
+      <aidescription></aidescription>
       <allowquickadd>F</allowquickadd>
       <applyformatting>F</applyformatting>
       <checkspelling>F</checkspelling>
