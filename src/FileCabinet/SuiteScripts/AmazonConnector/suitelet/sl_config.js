@@ -20,9 +20,8 @@ define([
     '../lib/mrDataHelper',
     '../lib/logger',
     '../services/connectionTestService',
-    '../services/orderService',
-    '../lib/amazonClient'
-], function (serverWidget, search, task, url, runtime, redirect, log, format, constants, configHelper, mrDataHelper, logger, connectionTestService, orderService, amazonClient) {
+    '../services/orderService'
+], function (serverWidget, search, task, url, runtime, redirect, log, format, constants, configHelper, mrDataHelper, logger, connectionTestService, orderService) {
 
     const CR = constants.CUSTOM_RECORDS;
 
@@ -160,33 +159,52 @@ define([
         // -- Order Lookup Tab --
         form.addTab({ id: 'custpage_tab_lookup', label: 'Order Lookup' });
 
-        form.addField({
+        // Instructions
+        var instrField = form.addField({
+            id: 'custpage_lookup_instructions',
+            type: serverWidget.FieldType.INLINEHTML,
+            label: ' ',
+            container: 'custpage_tab_lookup'
+        });
+        instrField.defaultValue = '<div style="padding:10px 0;font-size:13px;">' +
+            '<b>Single Order Lookup:</b> Enter Config ID + Amazon Order ID, then click <b>Lookup Order</b>.<br>' +
+            '<b>Date Range Fetch:</b> Enter Config ID + Date From + Date To, then click <b>Fetch Orders by Date</b>.<br>' +
+            'Results will appear in the <i>Recent Integration Logs</i> tab after processing.</div>';
+
+        // Config ID field (shared by both operations)
+        var cfgField = form.addField({
             id: 'custpage_lookup_config',
             type: serverWidget.FieldType.TEXT,
-            label: 'Config Internal ID',
+            label: 'Config Internal ID (required)',
             container: 'custpage_tab_lookup'
         });
+        cfgField.setHelpText({ help: 'Enter the internal ID of the Amazon connector config record to use for API authentication.' });
 
-        form.addField({
+        // --- Single Order fields ---
+        var orderField = form.addField({
             id: 'custpage_lookup_order_id',
             type: serverWidget.FieldType.TEXT,
-            label: 'Amazon Order ID',
+            label: 'Amazon Order ID (for single order lookup)',
             container: 'custpage_tab_lookup'
         });
+        orderField.setHelpText({ help: 'Enter the Amazon Order ID (e.g. 114-1234567-1234567) to fetch and import a single order.' });
 
-        form.addField({
+        // --- Date Range fields ---
+        var dateFromField = form.addField({
             id: 'custpage_lookup_date_from',
             type: serverWidget.FieldType.DATE,
-            label: 'Date From',
+            label: 'Date From (for date range fetch)',
             container: 'custpage_tab_lookup'
         });
+        dateFromField.setHelpText({ help: 'Start date for fetching orders from Amazon.' });
 
-        form.addField({
+        var dateToField = form.addField({
             id: 'custpage_lookup_date_to',
             type: serverWidget.FieldType.DATE,
-            label: 'Date To',
+            label: 'Date To (for date range fetch)',
             container: 'custpage_tab_lookup'
         });
+        dateToField.setHelpText({ help: 'End date for fetching orders from Amazon.' });
 
         form.addButton({
             id: 'custpage_btn_lookup_order',
@@ -397,7 +415,8 @@ define([
 
     /**
      * Handles single order lookup by Amazon Order ID.
-     * Fetches the order and its items from Amazon, then triggers MR import.
+     * Fetches the order header from Amazon SP-API, then triggers MR import
+     * which fetches order items, address, and creates the NetSuite transaction.
      */
     function handleLookupOrder(context) {
         var configId = context.request.parameters.custpage_lookup_config;
@@ -405,7 +424,8 @@ define([
 
         if (!configId || !orderId) {
             logger.error(constants.LOG_TYPE.ORDER_SYNC,
-                'Order Lookup: Missing Config ID or Amazon Order ID.');
+                'Order Lookup: Config ID and Amazon Order ID are both required. ' +
+                'Go to the Order Lookup tab and fill in both fields.');
             return;
         }
 
@@ -413,38 +433,33 @@ define([
             var config = configHelper.getConfig(configId);
             if (!config) {
                 logger.error(constants.LOG_TYPE.ORDER_SYNC,
-                    'Order Lookup: Config not found for ID ' + configId);
+                    'Order Lookup: Config not found for ID ' + configId +
+                    '. Verify the internal ID on the Order Lookup tab.');
                 return;
             }
 
-            // Fetch order from Amazon
+            // Fetch order header from Amazon SP-API (/orders/v0/orders/{orderId})
+            logger.progress(constants.LOG_TYPE.ORDER_SYNC,
+                'Order Lookup: Fetching order ' + orderId + ' from Amazon...');
+
             var orderData = orderService.fetchSingleOrder(config, orderId);
             if (!orderData) {
                 logger.error(constants.LOG_TYPE.ORDER_SYNC,
-                    'Order Lookup: No order data returned for ' + orderId);
+                    'Order Lookup: Amazon returned no data for order ' + orderId +
+                    '. Verify the order ID is correct.');
                 return;
             }
 
-            // Fetch order items
-            var itemsResponse;
-            try {
-                itemsResponse = amazonClient.getOrderItems(config, orderId);
-            } catch (itemErr) {
-                logger.warn(constants.LOG_TYPE.ORDER_SYNC,
-                    'Order Lookup: Could not fetch items for ' + orderId + ': ' + itemErr.message);
-            }
+            logger.progress(constants.LOG_TYPE.ORDER_SYNC,
+                'Order Lookup: Fetched order ' + orderId +
+                ' (Status: ' + (orderData.OrderStatus || 'unknown') +
+                ', Total: ' + (orderData.OrderTotal ? orderData.OrderTotal.Amount : 'N/A') +
+                ', Channel: ' + (orderData.FulfillmentChannel || 'unknown') + ')');
 
-            // Wrap in array for MR import compatibility
-            var orderObj = orderData;
-            if (itemsResponse) {
-                var payload = itemsResponse.payload || itemsResponse;
-                orderObj.OrderItems = payload.OrderItems || [];
-            }
-
-            // Write to temp file and trigger MR import
+            // Write order to temp file — MR import will fetch items + address from Amazon
             var fileId = mrDataHelper.writeDataFile({
                 configId: configId,
-                orders: [orderObj]
+                orders: [orderData]
             }, 'order_lookup');
 
             var mrTask = task.create({
@@ -460,26 +475,45 @@ define([
             if (!taskId) {
                 mrDataHelper.deleteTempFile(fileId);
                 logger.warn(constants.LOG_TYPE.ORDER_SYNC,
-                    'Order Lookup: MR import already running. Order ' + orderId + ' will be picked up on next sync.');
+                    'Order Lookup: Map/Reduce import is already running. ' +
+                    'Order ' + orderId + ' temp file cleaned up. Try again in a few minutes.');
                 return;
             }
 
             logger.success(constants.LOG_TYPE.ORDER_SYNC,
-                'Order Lookup: Fetched order ' + orderId + ' and triggered MR import. Task: ' + taskId, {
+                'Order Lookup: Order ' + orderId + ' fetched from Amazon and MR import triggered (Task: ' + taskId + '). ' +
+                'Check Recent Integration Logs for import results.', {
                 configId: configId,
                 amazonRef: orderId
             });
         } catch (e) {
-            logger.error(constants.LOG_TYPE.ORDER_SYNC,
-                'Order Lookup failed for ' + orderId + ': ' + e.message, {
-                configId: configId,
-                details: e.stack
-            });
+            var errMsg = e.message || String(e);
+            var isNotFound = errMsg.indexOf('404') !== -1 || errMsg.indexOf('not found') !== -1;
+            var isRateLimit = errMsg.indexOf('429') !== -1 || errMsg.indexOf('rate') !== -1;
+
+            if (isNotFound) {
+                logger.error(constants.LOG_TYPE.ORDER_SYNC,
+                    'Order Lookup: Amazon order ' + orderId + ' not found (404). ' +
+                    'Verify the order ID is correct and belongs to this seller account.', {
+                    configId: configId, amazonRef: orderId
+                });
+            } else if (isRateLimit) {
+                logger.warn(constants.LOG_TYPE.ORDER_SYNC,
+                    'Order Lookup: Amazon API rate limit hit for order ' + orderId + '. Try again in a minute.', {
+                    configId: configId, amazonRef: orderId
+                });
+            } else {
+                logger.error(constants.LOG_TYPE.ORDER_SYNC,
+                    'Order Lookup failed for ' + orderId + ': ' + errMsg, {
+                    configId: configId, details: e.stack
+                });
+            }
         }
     }
 
     /**
      * Handles fetching orders from Amazon within a date range and triggering MR import.
+     * Uses Amazon SP-API /orders/v0/orders with CreatedAfter + CreatedBefore params.
      */
     function handleFetchOrdersByDateRange(context) {
         var configId = context.request.parameters.custpage_lookup_config;
@@ -488,7 +522,8 @@ define([
 
         if (!configId || !dateFrom || !dateTo) {
             logger.error(constants.LOG_TYPE.ORDER_SYNC,
-                'Date Range Fetch: Missing Config ID, Date From, or Date To.');
+                'Date Range Fetch: Config ID, Date From, and Date To are all required. ' +
+                'Go to the Order Lookup tab and fill in all three fields.');
             return;
         }
 
@@ -496,7 +531,8 @@ define([
             var config = configHelper.getConfig(configId);
             if (!config) {
                 logger.error(constants.LOG_TYPE.ORDER_SYNC,
-                    'Date Range Fetch: Config not found for ID ' + configId);
+                    'Date Range Fetch: Config not found for ID ' + configId +
+                    '. Verify the internal ID on the Order Lookup tab.');
                 return;
             }
 
@@ -509,17 +545,20 @@ define([
             var isoFrom = parsedFrom.toISOString();
             var isoTo = parsedTo.toISOString();
 
-            // Fetch orders from Amazon
+            logger.progress(constants.LOG_TYPE.ORDER_SYNC,
+                'Date Range Fetch: Fetching orders from Amazon (' + isoFrom + ' to ' + isoTo + ')...');
+
+            // Fetch orders from Amazon SP-API with pagination
             var orders = orderService.fetchOrdersByDateRange(config, isoFrom, isoTo);
 
             if (!orders || orders.length === 0) {
                 logger.progress(constants.LOG_TYPE.ORDER_SYNC,
-                    'Date Range Fetch: No orders found from ' + isoFrom + ' to ' + isoTo +
-                    ' for config ' + configId);
+                    'Date Range Fetch: No orders found from ' + dateFrom + ' to ' + dateTo +
+                    ' for config ' + configId + '. The date range may be empty or the marketplace has no orders.');
                 return;
             }
 
-            // Filter out existing orders
+            // Filter out orders that already exist in NetSuite
             var newOrders = [];
             for (var i = 0; i < orders.length; i++) {
                 var existing = orderService.findExistingOrderMap(orders[i].AmazonOrderId);
@@ -530,11 +569,11 @@ define([
 
             if (newOrders.length === 0) {
                 logger.progress(constants.LOG_TYPE.ORDER_SYNC,
-                    'Date Range Fetch: All ' + orders.length + ' orders already exist in NetSuite.');
+                    'Date Range Fetch: Found ' + orders.length + ' orders but all already exist in NetSuite. No import needed.');
                 return;
             }
 
-            // Write to temp file and trigger MR import
+            // Write to temp file — MR import will fetch items + address for each order
             var fileId = mrDataHelper.writeDataFile({
                 configId: configId,
                 orders: newOrders
@@ -553,23 +592,31 @@ define([
             if (!taskId) {
                 mrDataHelper.deleteTempFile(fileId);
                 logger.warn(constants.LOG_TYPE.ORDER_SYNC,
-                    'Date Range Fetch: MR import already running. ' + newOrders.length +
-                    ' orders will need to be re-fetched.');
+                    'Date Range Fetch: Map/Reduce import is already running. ' +
+                    newOrders.length + ' orders not imported. Try again in a few minutes.');
                 return;
             }
 
             logger.success(constants.LOG_TYPE.ORDER_SYNC,
                 'Date Range Fetch: Found ' + orders.length + ' orders (' + newOrders.length +
-                ' new). MR import triggered. Task: ' + taskId, {
+                ' new, ' + (orders.length - newOrders.length) + ' already in NetSuite). ' +
+                'MR import triggered (Task: ' + taskId + '). Check Recent Integration Logs for results.', {
                 configId: configId,
-                details: 'Date range: ' + isoFrom + ' to ' + isoTo
+                details: 'Date range: ' + dateFrom + ' to ' + dateTo
             });
         } catch (e) {
-            logger.error(constants.LOG_TYPE.ORDER_SYNC,
-                'Date Range Fetch failed: ' + e.message, {
-                configId: configId,
-                details: e.stack
-            });
+            var errMsg = e.message || String(e);
+            if (errMsg.indexOf('429') !== -1) {
+                logger.warn(constants.LOG_TYPE.ORDER_SYNC,
+                    'Date Range Fetch: Amazon API rate limit hit. Try again in a minute.', {
+                    configId: configId
+                });
+            } else {
+                logger.error(constants.LOG_TYPE.ORDER_SYNC,
+                    'Date Range Fetch failed: ' + errMsg, {
+                    configId: configId, details: e.stack
+                });
+            }
         }
     }
 

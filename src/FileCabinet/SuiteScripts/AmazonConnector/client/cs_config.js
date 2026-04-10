@@ -64,6 +64,7 @@ define(['N/currentRecord', 'N/ui/dialog'], function (currentRecord, dialog) {
 
     /**
      * Fetches and imports a single Amazon order by Order ID.
+     * Fields are on the "Order Lookup" tab: Config Internal ID + Amazon Order ID.
      */
     function lookupOrder() {
         var rec = currentRecord.get();
@@ -71,16 +72,24 @@ define(['N/currentRecord', 'N/ui/dialog'], function (currentRecord, dialog) {
         var orderId = rec.getValue({ fieldId: 'custpage_lookup_order_id' });
 
         if (!configId || !orderId) {
+            var missing = [];
+            if (!configId) missing.push('Config Internal ID');
+            if (!orderId) missing.push('Amazon Order ID');
             dialog.alert({
-                title: 'Validation',
-                message: 'Please enter both Config Internal ID and Amazon Order ID.'
+                title: 'Missing Fields',
+                message: 'Go to the "Order Lookup" tab and enter: ' + missing.join(', ') + '.\n\n' +
+                    'Config Internal ID = the internal ID of your Amazon connector config record.\n' +
+                    'Amazon Order ID = the Amazon order number (e.g. 114-1234567-1234567).'
             });
             return;
         }
 
         dialog.confirm({
-            title: 'Lookup Order',
-            message: 'Fetch and import Amazon order ' + orderId + ' using config ' + configId + '?'
+            title: 'Fetch Order from Amazon',
+            message: 'This will:\n' +
+                '1. Fetch order ' + orderId + ' from Amazon SP-API\n' +
+                '2. Trigger the Map/Reduce import to create the NetSuite transaction\n\n' +
+                'Config: ' + configId + '\nOrder: ' + orderId + '\n\nProceed?'
         }).then(function (result) {
             if (result) {
                 rec.setValue({ fieldId: 'custpage_action', value: 'lookup_order' });
@@ -92,6 +101,7 @@ define(['N/currentRecord', 'N/ui/dialog'], function (currentRecord, dialog) {
 
     /**
      * Fetches and imports Amazon orders within a date range.
+     * Fields are on the "Order Lookup" tab: Config Internal ID + Date From + Date To.
      */
     function fetchOrdersByDate() {
         var rec = currentRecord.get();
@@ -100,17 +110,26 @@ define(['N/currentRecord', 'N/ui/dialog'], function (currentRecord, dialog) {
         var dateTo = rec.getValue({ fieldId: 'custpage_lookup_date_to' });
 
         if (!configId || !dateFrom || !dateTo) {
+            var missing = [];
+            if (!configId) missing.push('Config Internal ID');
+            if (!dateFrom) missing.push('Date From');
+            if (!dateTo) missing.push('Date To');
             dialog.alert({
-                title: 'Validation',
-                message: 'Please enter Config Internal ID, Date From, and Date To.'
+                title: 'Missing Fields',
+                message: 'Go to the "Order Lookup" tab and enter: ' + missing.join(', ') + '.\n\n' +
+                    'Config Internal ID = the internal ID of your Amazon connector config record.\n' +
+                    'Date From / Date To = the date range to fetch orders for.'
             });
             return;
         }
 
         dialog.confirm({
-            title: 'Fetch Orders by Date',
-            message: 'Fetch and import all Amazon orders from ' + dateFrom + ' to ' + dateTo +
-                ' using config ' + configId + '?'
+            title: 'Fetch Orders by Date Range',
+            message: 'This will:\n' +
+                '1. Fetch ALL orders from Amazon SP-API created between ' + dateFrom + ' and ' + dateTo + '\n' +
+                '2. Filter out orders that already exist in NetSuite\n' +
+                '3. Trigger the Map/Reduce import for new orders\n\n' +
+                'Config: ' + configId + '\n\nThis may take a while for large date ranges. Proceed?'
         }).then(function (result) {
             if (result) {
                 rec.setValue({ fieldId: 'custpage_action', value: 'fetch_orders_daterange' });
