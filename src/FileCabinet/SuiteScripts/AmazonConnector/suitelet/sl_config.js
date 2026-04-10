@@ -19,9 +19,10 @@ define([
     '../lib/configHelper',
     '../lib/mrDataHelper',
     '../lib/logger',
+    '../lib/amazonClient',
     '../services/connectionTestService',
     '../services/orderService'
-], function (serverWidget, search, task, url, runtime, redirect, log, format, constants, configHelper, mrDataHelper, logger, connectionTestService, orderService) {
+], function (serverWidget, search, task, url, runtime, redirect, log, format, constants, configHelper, mrDataHelper, logger, amazonClient, connectionTestService, orderService) {
 
     const CR = constants.CUSTOM_RECORDS;
 
@@ -415,8 +416,8 @@ define([
 
     /**
      * Handles single order lookup by Amazon Order ID.
-     * Fetches the order header from Amazon SP-API, then triggers MR import
-     * which fetches order items, address, and creates the NetSuite transaction.
+     * Fetches order header, items, and address from Amazon SP-API,
+     * then creates the NetSuite transaction directly (no Map/Reduce needed for one order).
      */
     function handleLookupOrder(context) {
         var configId = context.request.parameters.custpage_lookup_config;
@@ -438,7 +439,17 @@ define([
                 return;
             }
 
-            // Fetch order header from Amazon SP-API (/orders/v0/orders/{orderId})
+            // Check if order already exists in NetSuite
+            var existing = orderService.findExistingOrderMap(orderId);
+            if (existing) {
+                var existingTxn = existing.nsInvoiceId || existing.nsCashSaleId || existing.nsOrderId;
+                logger.progress(constants.LOG_TYPE.ORDER_SYNC,
+                    'Order Lookup: Order ' + orderId + ' already exists in NetSuite (transaction ID: ' +
+                    existingTxn + ', status: ' + existing.status + '). Skipping import.');
+                return;
+            }
+
+            // Step 1: Fetch order header from Amazon SP-API
             logger.progress(constants.LOG_TYPE.ORDER_SYNC,
                 'Order Lookup: Fetching order ' + orderId + ' from Amazon...');
 
@@ -456,34 +467,44 @@ define([
                 ', Total: ' + (orderData.OrderTotal ? orderData.OrderTotal.Amount : 'N/A') +
                 ', Channel: ' + (orderData.FulfillmentChannel || 'unknown') + ')');
 
-            // Write order to temp file — MR import will fetch items + address from Amazon
-            var fileId = mrDataHelper.writeDataFile({
-                configId: configId,
-                orders: [orderData]
-            }, 'order_lookup');
-
-            var mrTask = task.create({
-                taskType: task.TaskType.MAP_REDUCE,
-                scriptId: constants.SCRIPT_IDS.MR_ORDER_IMPORT,
-                deploymentId: constants.DEPLOY_IDS.MR_ORDER_IMPORT,
-                params: {
-                    custscript_amz_mr_order_data: String(fileId)
-                }
-            });
-
-            var taskId = mrDataHelper.submitMrTask(mrTask, constants.LOG_TYPE.ORDER_SYNC, logger);
-            if (!taskId) {
-                mrDataHelper.deleteTempFile(fileId);
-                logger.warn(constants.LOG_TYPE.ORDER_SYNC,
-                    'Order Lookup: Map/Reduce import is already running. ' +
-                    'Order ' + orderId + ' temp file cleaned up. Try again in a few minutes.');
+            // Step 2: Fetch order items from Amazon SP-API
+            var orderItems;
+            try {
+                var itemsResponse = amazonClient.getOrderItems(config, orderId);
+                orderItems = itemsResponse.payload || itemsResponse;
+            } catch (itemsErr) {
+                logger.error(constants.LOG_TYPE.ORDER_SYNC,
+                    'Order Lookup: Failed to fetch items for ' + orderId + ': ' + itemsErr.message, {
+                    configId: configId, amazonRef: orderId
+                });
                 return;
             }
 
+            // Step 3: Fetch shipping address from Amazon SP-API
+            try {
+                var addrResponse = amazonClient.getOrderAddress(config, orderId);
+                var address = (addrResponse.payload || addrResponse).ShippingAddress;
+                if (address) {
+                    orderData.ShippingAddress = address;
+                }
+            } catch (addrErr) {
+                log.debug({
+                    title: 'Order Lookup',
+                    details: 'Could not get address for ' + orderId + ': ' + addrErr.message
+                });
+            }
+
+            // Step 4: Create NetSuite transaction directly (Sales Order, Cash Sale, or Invoice)
+            var result = orderService.createSalesOrder(config, orderData, orderItems);
+
+            var txnType = result.invoiceId ? 'Invoice' : result.cashSaleId ? 'Cash Sale' : 'Sales Order';
+            var txnId = result.invoiceId || result.cashSaleId || result.salesOrderId;
+
             logger.success(constants.LOG_TYPE.ORDER_SYNC,
-                'Order Lookup: Order ' + orderId + ' fetched from Amazon and MR import triggered (Task: ' + taskId + '). ' +
-                'Check Recent Integration Logs for import results.', {
+                'Order Lookup: ' + txnType + ' #' + txnId + ' created for Amazon order ' + orderId, {
                 configId: configId,
+                recordType: txnType.toLowerCase().replace(' ', ''),
+                recordId: txnId,
                 amazonRef: orderId
             });
         } catch (e) {
