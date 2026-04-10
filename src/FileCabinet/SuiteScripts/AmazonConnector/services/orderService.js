@@ -655,8 +655,78 @@ define([
         }
     }
 
+    /**
+     * Fetches a single order from Amazon by Order ID.
+     * @param {Object} config - Connector config
+     * @param {string} orderId - Amazon Order ID
+     * @returns {Object} Order object from Amazon
+     */
+    function fetchSingleOrder(config, orderId) {
+        var response = amazonClient.getOrder(config, orderId);
+        var payload = response.payload || response;
+        return payload;
+    }
+
+    /**
+     * Fetches orders from Amazon within a date range (createdAfter to createdBefore).
+     * Handles pagination automatically.
+     * @param {Object} config - Connector config
+     * @param {string} createdAfter - ISO 8601 date string
+     * @param {string} createdBefore - ISO 8601 date string
+     * @returns {Array} Array of order objects
+     */
+    function fetchOrdersByDateRange(config, createdAfter, createdBefore) {
+        var allOrders = [];
+        var nextToken = null;
+        var pageCount = 0;
+        var PAGINATION_DELAY_MS = 3000;
+
+        do {
+            var response;
+            try {
+                response = amazonClient.getOrders(config, createdAfter, nextToken, createdBefore);
+            } catch (fetchErr) {
+                if (allOrders.length > 0) {
+                    logger.warn(constants.LOG_TYPE.ORDER_SYNC,
+                        'Order fetch failed on page ' + (pageCount + 1) +
+                        ' but returning ' + allOrders.length +
+                        ' orders from previous pages. Error: ' + fetchErr.message);
+                    return allOrders;
+                }
+                throw fetchErr;
+            }
+
+            var payload = response.payload || response;
+            var orders = payload.Orders || [];
+            allOrders = allOrders.concat(orders);
+            nextToken = payload.NextToken || null;
+            pageCount++;
+
+            if (nextToken) {
+                var remaining = runtime.getCurrentScript().getRemainingUsage();
+                if (remaining < 500) {
+                    logger.warn(constants.LOG_TYPE.ORDER_SYNC,
+                        'Low governance (' + remaining + ') during date range fetch, stopping at page ' +
+                        pageCount + '. Fetched ' + allOrders.length + ' orders so far.');
+                    break;
+                }
+                amazonClient.busyWait(PAGINATION_DELAY_MS);
+            }
+        } while (nextToken);
+
+        log.audit({
+            title: 'Date Range Order Fetch Complete',
+            details: 'Fetched ' + allOrders.length + ' orders across ' + pageCount +
+                ' pages (from ' + createdAfter + ' to ' + createdBefore + ')'
+        });
+
+        return allOrders;
+    }
+
     return {
         fetchAmazonOrders,
+        fetchSingleOrder,
+        fetchOrdersByDateRange,
         findExistingOrderMap,
         resolveNetSuiteItem,
         createSalesOrder,

@@ -158,6 +158,7 @@ define([
 
         var paymentTotal = 0;
         var linesAdded = 0;
+        var skippedDescs = [];
 
         for (var i = 0; i < orderLines.length; i++) {
             var line = orderLines[i];
@@ -180,6 +181,7 @@ define([
             // Look up fee item from charge map
             var itemId = lookupSettlementItem(desc, marketplace, chargeMap);
             if (!itemId) {
+                skippedDescs.push(desc);
                 logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
                     'financialService.updateInvoiceLines: No item found for desc=' + desc +
                     ', marketplace=' + marketplace + ', invoice=' + invoiceId + '. Skipping line.');
@@ -217,6 +219,14 @@ define([
             linesAdded++;
         }
 
+        if (skippedDescs.length > 0) {
+            logger.warn(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                'financialService.updateInvoiceLines: ' + skippedDescs.length +
+                ' line(s) skipped for invoice ' + invoiceId +
+                '. Missing charge map items: ' + skippedDescs.join(', ') +
+                '. Marketplace: ' + marketplace);
+        }
+
         if (linesAdded > 0) {
             inv.save({ ignoreMandatoryFields: true });
 
@@ -231,7 +241,7 @@ define([
                 'financialService.updateInvoiceLines: No new lines to add for invoice ' + invoiceId);
         }
 
-        return { invoiceId: invoiceId, paymentTotal: paymentTotal };
+        return { invoiceId: invoiceId, paymentTotal: paymentTotal, linesAdded: linesAdded, skippedDescs: skippedDescs };
     }
 
     // ========================================================================

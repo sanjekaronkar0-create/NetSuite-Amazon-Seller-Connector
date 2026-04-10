@@ -217,15 +217,26 @@ define(['N/https', 'N/log', './amazonAuth', './constants', './logger'],
      * @param {string} [nextToken] - Pagination token
      * @returns {Object} Orders API response
      */
-    function getOrders(config, createdAfter, nextToken) {
+    function getOrders(config, createdAfter, nextToken, createdBefore) {
         const params = {
             MarketplaceIds: config.marketplaceId,
             CreatedAfter: createdAfter
         };
+        if (createdBefore) params.CreatedBefore = createdBefore;
         if (nextToken) {
             params.NextToken = nextToken;
         }
         return get({ config, path: '/orders/v0/orders', params });
+    }
+
+    /**
+     * Gets a single order by Amazon Order ID.
+     * @param {Object} config
+     * @param {string} orderId - Amazon Order ID
+     * @returns {Object} Order API response
+     */
+    function getOrder(config, orderId) {
+        return get({ config, path: '/orders/v0/orders/' + orderId });
     }
 
     /**
@@ -392,6 +403,7 @@ define(['N/https', 'N/log', './amazonAuth', './constants', './logger'],
         put,
         busyWait,
         getOrders,
+        getOrder,
         getOrderItems,
         getOrderAddress,
         createFeedDocument,
