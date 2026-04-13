@@ -168,11 +168,51 @@ define(['N/currentRecord', 'N/ui/dialog'], function (currentRecord, dialog) {
         });
     }
 
+    /**
+     * Processes settlement for a specific report ID.
+     * Fields: Config Internal ID + Settlement Report ID on the Order Lookup tab.
+     */
+    function processSettlement() {
+        var rec = currentRecord.get();
+        var configId = rec.getValue({ fieldId: 'custpage_lookup_config' });
+        var reportId = rec.getValue({ fieldId: 'custpage_settle_report_id' });
+
+        if (!configId || !reportId) {
+            var missing = [];
+            if (!configId) missing.push('Config Internal ID');
+            if (!reportId) missing.push('Settlement Report ID');
+            dialog.alert({
+                title: 'Missing Fields',
+                message: 'Go to the "Order Lookup" tab and enter: ' + missing.join(', ') + '.\n\n' +
+                    'Config Internal ID = the internal ID of your Amazon connector config record.\n' +
+                    'Settlement Report ID = the Amazon settlement report ID to process.'
+            });
+            return;
+        }
+
+        dialog.confirm({
+            title: 'Process Settlement',
+            message: 'This will:\n' +
+                '1. Find the settlement record for report ' + reportId + '\n' +
+                '2. Update existing invoices with settlement fee lines (charges as items)\n' +
+                '3. Create customer payments\n\n' +
+                'Only THIS settlement will be processed. Bulk settlement processing will NOT be triggered.\n\n' +
+                'Config: ' + configId + '\nReport ID: ' + reportId + '\n\nProceed?'
+        }).then(function (result) {
+            if (result) {
+                rec.setValue({ fieldId: 'custpage_action', value: 'process_settlement' });
+                var form = document.getElementById('main_form');
+                if (form) form.submit();
+            }
+        });
+    }
+
     return {
         pageInit,
         triggerSync,
         lookupOrder,
         fetchOrdersByDate,
+        processSettlement,
         testConnection,
         saveRecord
     };

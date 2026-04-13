@@ -81,22 +81,75 @@ define([
     }
 
     /**
-     * Looks up a fee/charge item from the charge map based on description and marketplace.
+     * Looks up a fee/charge item by description and marketplace.
+     * Primary: searches the old customrecord_amazon_sku_table by name (matching old script behavior).
+     * Fallback: checks the new chargeMap (from customrecord_amz_charge_map).
      * @param {string} desc - Fee description (e.g. 'FBAPerUnitFulfillmentFee')
      * @param {string} marketplace - Marketplace name (e.g. 'Amazon.ca')
      * @param {Object} chargeMap - { map: { descLower: { itemUs, itemCa, itemMx } }, ... }
      * @returns {string|null} NetSuite item internal ID, or null
      */
     function lookupSettlementItem(desc, marketplace, chargeMap) {
-        if (!desc || !chargeMap || !chargeMap.map) return null;
-        var key = desc.toLowerCase().trim();
-        var entry = chargeMap.map[key];
-        if (!entry) return null;
+        if (!desc) return null;
 
         var mp = (marketplace || '').toLowerCase().trim();
-        if (mp === 'amazon.ca' || mp === 'ca' || mp === 'canada') return entry.itemCa || null;
-        if (mp === 'amazon.com.mx' || mp === 'mx' || mp === 'mexico') return entry.itemMx || null;
-        return entry.itemUs || null;
+
+        // --- Primary lookup: old customrecord_amazon_sku_table ---
+        try {
+            var skuResults = search.create({
+                type: 'customrecord_amazon_sku_table',
+                filters: [['name', 'is', desc]],
+                columns: [
+                    'custrecord_amazon_sku_item',
+                    'custrecord_amazon_sku_item_ca',
+                    'custrecord_amazon_sku_item_mx'
+                ]
+            }).run().getRange({ start: 0, end: 1 });
+
+            if (skuResults && skuResults.length > 0) {
+                var itemId = null;
+                if (mp === 'amazon.ca' || mp === 'ca' || mp === 'canada') {
+                    itemId = skuResults[0].getValue('custrecord_amazon_sku_item_ca');
+                } else if (mp === 'amazon.com.mx' || mp === 'mx' || mp === 'mexico') {
+                    itemId = skuResults[0].getValue('custrecord_amazon_sku_item_mx');
+                } else {
+                    itemId = skuResults[0].getValue('custrecord_amazon_sku_item');
+                }
+                if (itemId) {
+                    log.debug({ title: 'lookupSettlementItem',
+                        details: 'Found item ' + itemId + ' for desc="' + desc +
+                        '" via SKU table (marketplace=' + marketplace + ')' });
+                    return itemId;
+                }
+            }
+        } catch (e) {
+            log.debug({ title: 'lookupSettlementItem',
+                details: 'SKU table lookup failed for desc="' + desc + '": ' + e.message });
+        }
+
+        // --- Fallback: new chargeMap (customrecord_amz_charge_map) ---
+        if (chargeMap && chargeMap.map) {
+            var key = desc.toLowerCase().trim();
+            var entry = chargeMap.map[key];
+            if (entry) {
+                var fallbackId = null;
+                if (mp === 'amazon.ca' || mp === 'ca' || mp === 'canada') {
+                    fallbackId = entry.itemCa || null;
+                } else if (mp === 'amazon.com.mx' || mp === 'mx' || mp === 'mexico') {
+                    fallbackId = entry.itemMx || null;
+                } else {
+                    fallbackId = entry.itemUs || null;
+                }
+                if (fallbackId) {
+                    log.debug({ title: 'lookupSettlementItem',
+                        details: 'Found item ' + fallbackId + ' for desc="' + desc +
+                        '" via charge map fallback (marketplace=' + marketplace + ')' });
+                    return fallbackId;
+                }
+            }
+        }
+
+        return null;
     }
 
     /**

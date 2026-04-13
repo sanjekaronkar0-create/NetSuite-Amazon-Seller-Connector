@@ -15,14 +15,16 @@ define([
     'N/redirect',
     'N/log',
     'N/format',
+    'N/record',
     '../lib/constants',
     '../lib/configHelper',
     '../lib/mrDataHelper',
     '../lib/logger',
     '../lib/amazonClient',
     '../services/connectionTestService',
-    '../services/orderService'
-], function (serverWidget, search, task, url, runtime, redirect, log, format, constants, configHelper, mrDataHelper, logger, amazonClient, connectionTestService, orderService) {
+    '../services/orderService',
+    '../services/financialService'
+], function (serverWidget, search, task, url, runtime, redirect, log, format, record, constants, configHelper, mrDataHelper, logger, amazonClient, connectionTestService, orderService, financialService) {
 
     const CR = constants.CUSTOM_RECORDS;
 
@@ -218,6 +220,31 @@ define([
             functionName: 'fetchOrdersByDate()'
         });
 
+        // --- Settlement Processing fields ---
+        var settleInstrField = form.addField({
+            id: 'custpage_settle_instructions',
+            type: serverWidget.FieldType.INLINEHTML,
+            label: ' ',
+            container: 'custpage_tab_lookup'
+        });
+        settleInstrField.defaultValue = '<div style="padding:10px 0;font-size:13px;border-top:1px solid #ccc;margin-top:10px;">' +
+            '<b>Settlement Processing:</b> Enter Config ID + Settlement Report ID, then click <b>Process Settlement</b>.<br>' +
+            'This will process only that settlement — updating invoices with charges, creating payments, and handling refunds.</div>';
+
+        var settleReportField = form.addField({
+            id: 'custpage_settle_report_id',
+            type: serverWidget.FieldType.TEXT,
+            label: 'Settlement Report ID',
+            container: 'custpage_tab_lookup'
+        });
+        settleReportField.setHelpText({ help: 'Enter the Amazon settlement report ID to process a specific settlement.' });
+
+        form.addButton({
+            id: 'custpage_btn_process_settlement',
+            label: 'Process Settlement',
+            functionName: 'processSettlement()'
+        });
+
         // -- Item Mapping Stats Tab --
         const mappingTab = form.addTab({ id: 'custpage_tab_mapping', label: 'Item Mapping' });
 
@@ -385,6 +412,10 @@ define([
                 handleFetchOrdersByDateRange(context);
             }
 
+            if (action === 'process_settlement') {
+                handleProcessSettlement(context);
+            }
+
             const syncInfo = syncMap[action];
             if (syncInfo) {
                 triggerScheduledScript(syncInfo.s, syncInfo.d);
@@ -439,13 +470,35 @@ define([
                 return;
             }
 
-            // Check if order already exists in NetSuite
+            // Check if order already exists in NetSuite (order map record)
             var existing = orderService.findExistingOrderMap(orderId);
             if (existing) {
                 var existingTxn = existing.nsInvoiceId || existing.nsCashSaleId || existing.nsOrderId;
                 logger.progress(constants.LOG_TYPE.ORDER_SYNC,
                     'Order Lookup: Order ' + orderId + ' already exists in NetSuite (transaction ID: ' +
                     existingTxn + ', status: ' + existing.status + '). Skipping import.');
+                return;
+            }
+
+            // Check if a transaction already exists by otherrefnum (catches orders from old system)
+            var existingTxnSearch = search.create({
+                type: 'transaction',
+                filters: [
+                    ['otherrefnum', 'equalto', orderId],
+                    'AND',
+                    ['type', 'anyof', ['CustInvc', 'SalesOrd', 'CashSale']],
+                    'AND',
+                    ['mainline', 'is', 'T']
+                ],
+                columns: ['internalid', 'type', 'tranid']
+            }).run().getRange({ start: 0, end: 1 });
+
+            if (existingTxnSearch && existingTxnSearch.length > 0) {
+                var txnType = existingTxnSearch[0].getText('type') || '';
+                var txnTranId = existingTxnSearch[0].getValue('tranid') || existingTxnSearch[0].id;
+                logger.progress(constants.LOG_TYPE.ORDER_SYNC,
+                    'Order Lookup: A ' + txnType + ' (ID: ' + txnTranId +
+                    ') already exists for Amazon order ' + orderId + '. Skipping import.');
                 return;
             }
 
@@ -638,6 +691,268 @@ define([
                     configId: configId, details: e.stack
                 });
             }
+        }
+    }
+
+    /**
+     * Handles processing a single settlement by report ID.
+     * Finds the settlement, iterates its order headers, and for each:
+     *   - Finds the existing invoice
+     *   - Adds settlement charge lines as items
+     *   - Creates customer payment
+     */
+    function handleProcessSettlement(context) {
+        var configId = context.request.parameters.custpage_lookup_config;
+        var reportId = context.request.parameters.custpage_settle_report_id;
+
+        if (!configId || !reportId) {
+            logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                'Process Settlement: Config ID and Settlement Report ID are both required.');
+            return;
+        }
+
+        try {
+            var config = configHelper.getConfig(configId);
+            if (!config) {
+                logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                    'Process Settlement: Config not found for ID ' + configId);
+                return;
+            }
+
+            var STL = CR.SETTLEMENT;
+            var SH = CR.SETTLE_HEADER;
+            var SL = CR.SETTLEMENT_LINE;
+
+            // Step 1: Find the settlement summary record by report ID
+            var settlementId = null;
+            search.create({
+                type: STL.ID,
+                filters: [[STL.FIELDS.REPORT_ID, 'is', reportId]],
+                columns: ['internalid']
+            }).run().each(function (result) {
+                settlementId = result.id;
+                return false;
+            });
+
+            if (!settlementId) {
+                logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                    'Process Settlement: No settlement record found for report ID ' + reportId +
+                    '. Verify the report ID is correct.');
+                return;
+            }
+
+            logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                'Process Settlement: Found settlement ' + settlementId + ' for report ' + reportId +
+                '. Processing order headers...');
+
+            // Step 2: Get charge map
+            var chargeMap = configHelper.getChargeAccountMap(configId);
+
+            // Step 3: Search settle headers for this settlement with UPDATE_INV = T
+            var ordersProcessed = 0;
+            var ordersSkipped = 0;
+            var totalLinesAdded = 0;
+
+            search.create({
+                type: SH.ID,
+                filters: [
+                    [SH.FIELDS.SUMMARY, 'anyof', settlementId],
+                    'AND',
+                    [SH.FIELDS.UPDATE_INV, 'is', 'T']
+                ],
+                columns: [SH.FIELDS.ORDER_ID, SH.FIELDS.MARKETPLACE, SH.FIELDS.INVOICE_REC]
+            }).run().each(function (headerResult) {
+                var headerId = headerResult.id;
+                var orderId = headerResult.getValue(SH.FIELDS.ORDER_ID);
+                var marketplace = headerResult.getValue(SH.FIELDS.MARKETPLACE) || '';
+
+                try {
+                    // Skip Non-Amazon
+                    if (marketplace === 'Non-Amazon') {
+                        record.submitFields({
+                            type: SH.ID, id: headerId,
+                            values: { [SH.FIELDS.UPDATE_INV]: false }
+                        });
+                        return true;
+                    }
+
+                    var effectiveConfig = configHelper.resolveMarketplaceSettingsByName(config, marketplace);
+
+                    // Get settlement lines for this order
+                    var orderLines = [];
+                    search.create({
+                        type: SL.ID,
+                        filters: [
+                            [SL.FIELDS.SUMMARY, 'anyof', settlementId],
+                            'AND',
+                            [SL.FIELDS.ORDER_ID, 'is', orderId],
+                            'AND',
+                            [SL.FIELDS.TRAN_TYPE, 'is', 'Order'],
+                            'AND',
+                            [SL.FIELDS.PROCESSED, 'is', 'F']
+                        ],
+                        columns: [
+                            'internalid',
+                            SL.FIELDS.AMOUNT_TYPE,
+                            SL.FIELDS.AMOUNT_DESC,
+                            SL.FIELDS.AMOUNT,
+                            SL.FIELDS.SKU,
+                            SL.FIELDS.QUANTITY,
+                            SL.FIELDS.POST_DATE_NS,
+                            SL.FIELDS.PROMO_ID
+                        ]
+                    }).run().each(function (lineResult) {
+                        orderLines.push({
+                            id: lineResult.id,
+                            amountType: lineResult.getValue(SL.FIELDS.AMOUNT_TYPE),
+                            amountDesc: lineResult.getValue(SL.FIELDS.AMOUNT_DESC),
+                            amount: lineResult.getValue(SL.FIELDS.AMOUNT),
+                            sku: lineResult.getValue(SL.FIELDS.SKU),
+                            postDateNs: lineResult.getValue(SL.FIELDS.POST_DATE_NS),
+                            orderLineId: lineResult.id
+                        });
+                        return true;
+                    });
+
+                    if (!orderLines || orderLines.length === 0) {
+                        record.submitFields({
+                            type: SH.ID, id: headerId,
+                            values: { [SH.FIELDS.UPDATE_INV]: false }
+                        });
+                        return true;
+                    }
+
+                    // Find existing invoice
+                    var existingInvId = null;
+                    try {
+                        var invLookup = search.lookupFields({
+                            type: SH.ID, id: headerId,
+                            columns: [SH.FIELDS.INVOICE_REC]
+                        });
+                        var invVal = invLookup[SH.FIELDS.INVOICE_REC];
+                        if (Array.isArray(invVal) && invVal.length > 0) existingInvId = invVal[0].value;
+                        else if (invVal) existingInvId = invVal;
+                    } catch (ignore) { }
+
+                    if (!existingInvId) {
+                        existingInvId = financialService.lookupInvoice(orderId);
+                        if (existingInvId) {
+                            record.submitFields({
+                                type: SH.ID, id: headerId,
+                                values: { [SH.FIELDS.INVOICE_REC]: existingInvId }
+                            });
+                        }
+                    }
+
+                    if (!existingInvId) {
+                        logger.warn(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                            'Process Settlement: No invoice found for order ' + orderId + '. Skipping.');
+                        record.submitFields({
+                            type: SH.ID, id: headerId,
+                            values: { [SH.FIELDS.ERROR]: 'No invoice found for this order.' }
+                        });
+                        ordersSkipped++;
+                        return true;
+                    }
+
+                    // Update invoice with settlement fee lines
+                    var updateResult = financialService.updateInvoiceLines(
+                        effectiveConfig, existingInvId, orderLines, marketplace, chargeMap
+                    );
+
+                    // Skip payment if no lines were added and descriptions were missing
+                    if (updateResult.linesAdded === 0 && updateResult.skippedDescs && updateResult.skippedDescs.length > 0) {
+                        var missingDescs = updateResult.skippedDescs.join(', ');
+                        logger.warn(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                            'Process Settlement: No lines added for order ' + orderId +
+                            '. Missing items for: ' + missingDescs);
+                        record.submitFields({
+                            type: SH.ID, id: headerId,
+                            values: {
+                                [SH.FIELDS.ERROR]: 'Missing charge map items: ' + missingDescs,
+                                [SH.FIELDS.INVOICE_ERROR]: 'Missing charge map items: ' + missingDescs
+                            }
+                        });
+                        ordersSkipped++;
+                        return true;
+                    }
+
+                    // Create customer payment
+                    var paymentId = null;
+                    if (updateResult.paymentTotal != null && updateResult.paymentTotal !== 0) {
+                        var settlement = {
+                            reportId: reportId,
+                            totalAmount: updateResult.paymentTotal,
+                            endDate: orderLines[0].postDateNs || new Date()
+                        };
+                        paymentId = financialService.createSettlementPayment(
+                            effectiveConfig, existingInvId, settlement, orderLines[0].postDateNs
+                        );
+                    }
+
+                    // Mark settlement lines as processed
+                    for (var i = 0; i < orderLines.length; i++) {
+                        try {
+                            record.submitFields({
+                                type: SL.ID,
+                                id: orderLines[i].id,
+                                values: { [SL.FIELDS.PROCESSED]: true }
+                            });
+                        } catch (markErr) {
+                            log.debug({ title: 'Process Settlement',
+                                details: 'Could not mark line ' + orderLines[i].id + ' as processed: ' + markErr.message });
+                        }
+                    }
+
+                    // Update header
+                    var headerUpdates = {
+                        [SH.FIELDS.UPDATE_INV]: false,
+                        [SH.FIELDS.DATA_LOADED]: true,
+                        [SH.FIELDS.SETTLED]: true,
+                        [SH.FIELDS.ERROR]: '',
+                        [SH.FIELDS.INVOICE_ERROR]: ''
+                    };
+                    if (existingInvId) headerUpdates[SH.FIELDS.INVOICE_REC] = existingInvId;
+                    if (paymentId) headerUpdates[SH.FIELDS.PAYMENT_REC] = [paymentId];
+                    if (effectiveConfig.customer) headerUpdates[SH.FIELDS.CUSTOMER] = effectiveConfig.customer;
+                    record.submitFields({ type: SH.ID, id: headerId, values: headerUpdates });
+
+                    ordersProcessed++;
+                    totalLinesAdded += updateResult.linesAdded || 0;
+
+                    logger.progress(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                        'Process Settlement: Order ' + orderId + ' — Invoice ' + existingInvId +
+                        ', Payment ' + (paymentId || 'none') + ', Lines: ' + (updateResult.linesAdded || 0));
+
+                } catch (orderErr) {
+                    logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                        'Process Settlement: Error for order ' + orderId + ': ' + orderErr.message);
+                    try {
+                        record.submitFields({
+                            type: SH.ID, id: headerId,
+                            values: { [SH.FIELDS.ERROR]: orderErr.message }
+                        });
+                    } catch (ignore) { }
+                    ordersSkipped++;
+                }
+
+                return true;
+            });
+
+            logger.success(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                'Process Settlement complete for report ' + reportId + ': ' +
+                ordersProcessed + ' order(s) processed, ' + ordersSkipped + ' skipped, ' +
+                totalLinesAdded + ' total lines added.', {
+                configId: configId,
+                amazonRef: reportId
+            });
+
+        } catch (e) {
+            logger.error(constants.LOG_TYPE.SETTLEMENT_SYNC,
+                'Process Settlement failed for report ' + reportId + ': ' + (e.message || String(e)), {
+                configId: configId,
+                details: e.stack
+            });
         }
     }
 
